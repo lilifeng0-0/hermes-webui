@@ -297,6 +297,7 @@ _PROVIDER_MODELS = {
         {'id': 'gemini-2.5-pro',    'label': 'Gemini 2.5 Pro (via Nous)'},
     ],
     'zai': [
+        {'id': 'glm-5.1',            'label': 'GLM-5.1'},
         {'id': 'glm-5',              'label': 'GLM-5'},
         {'id': 'glm-5-turbo',        'label': 'GLM-5 Turbo'},
         {'id': 'glm-4.7',            'label': 'GLM-4.7'},

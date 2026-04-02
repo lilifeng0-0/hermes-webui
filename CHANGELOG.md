@@ -5,6 +5,15 @@
 
 ---
 
+## [v0.17.2] Model Update
+*April 2, 2026*
+
+### Enhancements
+- **GLM-5.1 added to Z.AI model list.** New model available in the dropdown
+  for Z.AI provider users. (Fixes #17)
+
+---
+
 ## [v0.17.1] Security + Bug Fixes
 *April 2, 2026 | 237 tests*
 

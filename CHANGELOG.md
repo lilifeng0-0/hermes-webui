@@ -1,5 +1,38 @@
 # Hermes Web UI -- Changelog
 
+## [v0.50.41] feat(ui): render MEDIA: images inline in web UI chat (fixes #450)
+
+When the agent outputs `MEDIA:<path>` tokens — screenshots from the browser tool,
+generated images, vision outputs — the web UI now renders them **inline in the chat**,
+the same way Claude.ai handles images. No more relaying screenshots through Telegram.
+
+**How it works:**
+- Local image path (`MEDIA:/tmp/screenshot.png`): rendered as `<img>` via `/api/media?path=...`
+- HTTP(S) URL to image (`MEDIA:https://example.com/img.png`): `<img>` directly from the URL
+- Non-image file (`MEDIA:/tmp/report.pdf`): styled download link (📎 filename)
+- Click any inline image to toggle full-size zoom
+
+**New endpoint — `GET /api/media?path=<encoded-path>`:**
+- Path allowlist: `~/.hermes/`, `/tmp/`, active workspace — covers all agent output locations
+- Auth-gated: requires valid session cookie when auth is enabled
+- Inline image MIME types: PNG, JPEG, GIF, WebP, BMP
+- SVG always served as download attachment (XSS prevention)
+- RFC 5987-compliant `Content-Disposition` headers (handles Unicode filenames)
+- `Cache-Control: private, max-age=3600`
+
+**Security:**
+- Original version had `~` (entire home dir) as an allowed root — **fixed** by independent reviewer
+- Restricted to `~/.hermes/`, `/tmp/`, and active workspace only
+- `Path.resolve()` + `commonpath` checks prevent symlink traversal
+
+**Changes:**
+- `api/routes.py`: `_handle_media()` handler + `/api/media` route
+- `static/ui.js`: `MEDIA:` stash in `renderMd()` (runs before `fence_stash`, stash token `\x00D`)
+- `static/style.css`: `.msg-media-img` (480px max-width, zoom-on-click), `.msg-media-link`
+- `tests/test_media_inline.py`: 19 new tests (static analysis + integration)
+
+- Total tests: 1117 (was 1098)
+
 ## [v0.50.40] feat: session UI polish + parallel test isolation
 
 **Session sidebar improvements:**

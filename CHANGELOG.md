@@ -15,6 +15,10 @@
 - **Topbar border invisible in light mode** — added `:root:not(.dark)` border override. (PR #627)
 - **User message bubble text contrast** — accent-colored bubbles now use skin-aware text colors meeting WCAG AA (Poseidon dark improved from 2.8 → 6.5 ratio). (PR #627)
 - **Settings skin persistence race condition** — save now waits for server confirmation before applying. (PR #627)
+## [v0.50.78] — 2026-04-17
+
+### Fixed
+- **Gemma 4 thinking tokens no longer shown raw in chat** — added `<|turn|>thinking\n...<turn|>` to the streaming think-token parser in `static/messages.js` and `_strip_thinking_markup()` in `api/streaming.py`. Previously Gemma 4's reasoning output appeared as raw text prepended to the answer. (Closes #607)
 
 ## [v0.50.76] — 2026-04-17
 

@@ -58,10 +58,11 @@ def test_gemma_content_removal_uses_replace_not_slice():
 
 
 def test_gemma_turn_regex_in_ui_js():
-    """The Gemma 4 <|turn>thinking\\n...<turn|> pattern must be extracted from persisted content."""
-    # Detection in _messageHasReasoningPayload
-    assert "<\\|turn>thinking" in UI_JS, (
-        "ui.js _messageHasReasoningPayload must detect Gemma 4 <|turn>thinking\\n...<turn|> pattern"
+    """The Gemma 4 <|turn|>thinking\\n...<turn|> pattern must be extracted from persisted content."""
+    # Detection in _messageHasReasoningPayload (correct double-pipe format)
+    assert "<\\|turn\\|>thinking" in UI_JS, (
+        "ui.js _messageHasReasoningPayload must detect Gemma 4 <|turn|>thinking\\n...<turn|> pattern"
+        " (note: double-pipe: <|turn|> not <|turn>)"
     )
     # Extraction block
     match = re.search(r'const gemmaTurnMatch=content\.match\((/[^/]+/)\)', UI_JS)

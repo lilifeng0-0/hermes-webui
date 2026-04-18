@@ -145,7 +145,7 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   const _thinkPairs=[
     {open:'<think>',close:'</think>'},
     {open:'<|channel>thought\n',close:'<channel|>'},
-    {open:'<|turn>thinking\n',close:'<turn|>'}  // Gemma 4
+    {open:'<|turn|>thinking\n',close:'<turn|>'}  // Gemma 4
   ];
 
   function _isActiveSession(){

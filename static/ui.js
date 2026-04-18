@@ -1095,7 +1095,7 @@ function _messageHasReasoningPayload(m){
   if(!m||m.role!=='assistant') return false;
   if(m.reasoning) return true;
   if(Array.isArray(m.content)) return m.content.some(p=>p&&(p.type==='thinking'||p.type==='reasoning'));
-  return /<think>[\s\S]*?<\/think>|<\|channel>thought\n[\s\S]*?<channel\|>|<\|turn>thinking\n[\s\S]*?<turn\|>/.test(String(m.content||''));
+  return /<think>[\s\S]*?<\/think>|<\|channel>thought\n[\s\S]*?<channel\|>|<\|turn\|>thinking\n[\s\S]*?<turn\|>/.test(String(m.content||''));
 }
 function _assistantRoleHtml(tsTitle=''){
   const _bn=window._botName||'Hermes';
@@ -1175,11 +1175,11 @@ function renderMessages(){
         }
       }
       if(!thinkingText){
-        // Gemma 4 uses asymmetric <|turn>thinking\n...<turn|> delimiters.
-        const gemmaTurnMatch=content.match(/<\|turn>thinking\n([\s\S]*?)<turn\|>/);
+        // Gemma 4 uses asymmetric <|turn|>thinking\n...<turn|> delimiters.
+        const gemmaTurnMatch=content.match(/<\|turn\|>thinking\n([\s\S]*?)<turn\|>/);
         if(gemmaTurnMatch){
           thinkingText=gemmaTurnMatch[1].trim();
-          content=content.replace(/<\|turn>thinking\n[\s\S]*?<turn\|>\s*/,'').trimStart();
+          content=content.replace(/<\|turn\|>thinking\n[\s\S]*?<turn\|>\s*/,'').trimStart();
         }
       }
     }

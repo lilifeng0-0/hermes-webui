@@ -552,7 +552,7 @@ const LOCALES = {
     theme_set: 'Тема: ',
     no_active_session: 'Нет активной сессии',
 
-    no_personalities: 'Персонажи не найдены (добавьте их в ~/.hermes/personalities/)',
+    no_personalities: 'Личности не найдены (добавьте их в ~/.hermes/personalities/)',
     clarify_heading: 'Требуется уточнение',
     clarify_hint: 'Выберите вариант или введите свой ответ ниже.',
     clarify_input_placeholder: 'Введите ответ…',
@@ -572,7 +572,7 @@ const LOCALES = {
     reference_only_label: 'Только справка',
     settings_label_skin: 'Скин',
     workspace_empty_dir: 'Это рабочее пространство пусто.',
-    workspace_empty_no_path: 'Рабочее пространство не выбрано. Настройте его в Настройки → Рабочее пространство.',    no_personalities: 'Личности не найдены (добавьте их в ~/.hermes/personalities/)',
+    workspace_empty_no_path: 'Рабочее пространство не выбрано. Настройте его в Настройки → Рабочее пространство.',
     available_personalities: 'Доступные личности:',
     personality_switch_hint: '\n\nИспользуйте `/personality <name>` для переключения или `/personality none` для сброса.',
     personalities_load_failed: 'Не удалось загрузить личности',

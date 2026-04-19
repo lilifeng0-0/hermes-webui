@@ -146,8 +146,8 @@
       },
 
       // ── 缩放 ────────────────────────────────────────────────────
-      zoomIn() { this.zoom = Math.min(5.0, this.zoom + 0.05); },
-      zoomOut() { this.zoom = Math.max(0.1, this.zoom - 0.05); },
+      zoomIn() { this.zoom = Math.min(5.0, this.zoom + 0.05); this.showZoomMenu = false; },
+      zoomOut() { this.zoom = Math.max(0.1, this.zoom - 0.05); this.showZoomMenu = false; },
       zoomTo(pct) { this.zoom = pct; this.showZoomMenu = false; },
       fitScreen() {
         this.zoom = 1.0;
@@ -179,6 +179,7 @@
           this.deleteSelected();
         } else if (e.key === 'Escape') {
           this.selectedIds = [];
+          this.contextMenu.visible = false;
           this.showSkillsDropdown = false;
         }
       },
@@ -614,7 +615,6 @@
       async handleImageUpload(e) {
         const file = e.target.files[0];
         if (!file) return;
-        const compId = 'comp-' + Date.now();
         const cid = this.canvas.id;
         const comp = this.addComponent({
           type: 'image',
@@ -623,7 +623,7 @@
           data: { uploading: true, progress: 0, fileName: file.name }
         });
         try {
-          const result = await CanvasAPI.upload(cid, compId, file);
+          const result = await CanvasAPI.upload(cid, comp.id, file);
           comp.data = { path: result.path, width: result.width, height: result.height, flipH: false, flipV: false };
           comp.width = Math.min(result.width || 200, 400);
           comp.height = Math.min(result.height || 150, 300);
@@ -648,6 +648,11 @@
         try {
           const result = await CanvasAPI.upload(cid, comp.id, file);
           comp.data = { path: result.path, width: result.width, height: result.height, duration: result.duration, mirrored: false };
+          if (result.width && result.height) {
+            const ratio = Math.min(400 / result.width, 300 / result.height);
+            comp.width = Math.round(result.width * ratio);
+            comp.height = Math.round(result.height * ratio);
+          }
           this.showToast('视频上传完成');
           this.scheduleAutoSave();
         } catch(err) {

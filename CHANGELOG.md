@@ -13,6 +13,11 @@
 ### Added
 - **Searchable model picker** — the model dropdown now has a live search input at the top. Type any part of a model name or ID to filter the list instantly; provider group headers (Anthropic, OpenAI, OpenRouter, etc.) remain visible in filtered results. Includes a clear button, Escape-to-close support, and a "No models found" empty state. i18n strings added for English, Spanish, and zh-CN. (PR #659 by @mmartial)
 
+## [v0.50.90] — 2026-04-19
+
+### Fixed
+- **`/compress` reference card now shows full handoff immediately after compression** — the context compaction card no longer shows only the short 3-line API summary right after `/compress` completes. The UI now prefers the persisted compaction message (full handoff) over the raw API response, matching what is shown after a page reload. (PR #699 by @franksong2702)
+
 ## [v0.50.89] — 2026-04-19
 
 ### Fixed

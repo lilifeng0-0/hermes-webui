@@ -1,5 +1,10 @@
 # Hermes Web UI -- Changelog
 
+## [v0.50.89] — 2026-04-19
+
+### Fixed
+- **Explicit UTF-8 encoding on all config/profile reads** — `Path.read_text()` calls in `api/config.py` and `api/profiles.py` now always specify `encoding="utf-8"`. On Windows systems with a non-UTF-8 default locale (e.g. GBK on Chinese Windows, Shift_JIS on Japanese Windows), omitting the encoding argument caused silent config loading failures. (PR #700 by @woaijiadanoo)
+
 ## [v0.50.87] — 2026-04-18
 
 ### Fixed

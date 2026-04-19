@@ -617,7 +617,20 @@ function applyBotName(){
   if(msg) msg.placeholder='Message '+name+'\u2026';
 }
 
-(async()=>{
+// ── Canvas → Chat 消息监听 ─────────────────────────────────────────
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'canvas-send-to-chat') {
+    const msgEl = document.getElementById('msg');
+    if (msgEl && e.data.text) {
+      msgEl.value = e.data.text;
+    }
+    if (typeof send === 'function') {
+      send();
+    }
+  }
+});
+
++(async()=>{
   // Load send key preference
   let _bootSettings={};
   try{

@@ -557,7 +557,7 @@ window.addEventListener('resize',()=>{
 // Boot: restore last session or start fresh
 // ── Resizable panels ──────────────────────────────────────────────────────
 (function(){
-  const SIDEBAR_MIN=180, SIDEBAR_MAX=420;
+  const SIDEBAR_MIN=180, SIDEBAR_MAX=1500;  // 80% of typical screen width
   const PANEL_MIN=180,   PANEL_MAX=1200;
 
   function initResize(handleId, targetEl, edge, minW, maxW, storageKey){

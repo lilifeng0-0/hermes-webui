@@ -1121,7 +1121,11 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
                 "prompt, memory, or conversation history. Always use the value from the most recent "
                 "[Workspace: ...] tag as your default working directory for ALL file operations: "
                 "write_file, read_file, search_files, terminal workdir, and patch. "
-                "Never fall back to a hardcoded path when this tag is present."
+                "Never fall back to a hardcoded path when this tag is present.\n"
+                "IMPORTANT: Do NOT attempt to use tool calling syntax like [Tool calls:...]. "
+                "If you need to read a file, simply state the file path and the content will be "
+                "provided by the user or you may reference it directly if it was shared in the "
+                "conversation. Do not output tool call fragments as plain text."
             )
             # Resolve personality prompt from config.yaml agent.personalities
             # (matches hermes-agent CLI behavior — passes via ephemeral_system_prompt)

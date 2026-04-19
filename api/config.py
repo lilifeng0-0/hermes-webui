@@ -209,6 +209,48 @@ def reload_config() -> None:
             logger.debug("Failed to load yaml config from %s", config_path)
 
 
+def load_custom_providers() -> list:
+    """Return the custom_providers list from config.yaml, or [] if none."""
+    try:
+        from api.profiles import get_active_hermes_home
+        config_path = get_active_hermes_home() / "config.yaml"
+    except ImportError:
+        config_path = Path.home() / ".hermes" / "config.yaml"
+    if not config_path.exists():
+        return []
+    try:
+        import yaml as _yaml
+        loaded = _yaml.safe_load(config_path.read_text())
+        if isinstance(loaded, dict):
+            cp = loaded.get("custom_providers", [])
+            return cp if isinstance(cp, list) else []
+    except Exception:
+        pass
+    return []
+
+
+def save_custom_providers(providers: list) -> None:
+    """Save the custom_providers list to config.yaml (list format expected by get_available_models)."""
+    try:
+        from api.profiles import get_active_hermes_home
+        config_path = get_active_hermes_home() / "config.yaml"
+    except ImportError:
+        config_path = Path.home() / ".hermes" / "config.yaml"
+    cfg = {}
+    if config_path.exists():
+        try:
+            import yaml as _yaml
+            loaded = _yaml.safe_load(config_path.read_text())
+            if isinstance(loaded, dict):
+                cfg = loaded
+        except Exception:
+            pass
+    cfg["custom_providers"] = providers
+    import yaml as _yaml
+    config_path.write_text(_yaml.dump(cfg, default_flow_style=False, allow_unicode=True))
+    reload_config()
+
+
 # Initial load
 reload_config()
 cfg = _cfg_cache  # alias for backward compat with existing references
@@ -282,7 +324,31 @@ def _discover_default_workspace() -> Path:
 
 
 DEFAULT_WORKSPACE = _discover_default_workspace()
-DEFAULT_MODEL = os.getenv("HERMES_WEBUI_DEFAULT_MODEL", "")  # Empty = use provider default; avoids showing unavailable OpenAI model to non-OpenAI users (#646)
+
+# Resolve default model: HERMES_WEBUI_DEFAULT_MODEL env var > hermes config.yaml >
+# hardcoded fallback.  We read from get_config() (which was loaded at import time
+# via reload_config() above) to pick up the user's configured model.
+def _resolve_default_model() -> str:
+    # 1. Explicit env override always wins
+    env_val = os.getenv("HERMES_WEBUI_DEFAULT_MODEL", "")
+    if env_val:
+        return env_val.strip()
+    # 2. hermes config.yaml
+    try:
+        _cfg = get_config()
+        mc = _cfg.get("model", {})
+        if isinstance(mc, str) and mc.strip():
+            return mc.strip()
+        if isinstance(mc, dict):
+            d = mc.get("default", "")
+            if d:
+                return str(d).strip()
+    except Exception:
+        pass
+    # 3. Fallback
+    return "openai/gpt-5.4-mini"
+
+DEFAULT_MODEL = _resolve_default_model()
 
 
 # ── Startup diagnostics ───────────────────────────────────────────────────────
@@ -1256,6 +1322,8 @@ _SETTINGS_DEFAULTS = {
     "notifications_enabled": False,  # browser notification when tab is in background
     "bubble_layout": False,  # right-aligned user / left-aligned assistant chat bubbles
     "password_hash": None,  # PBKDF2-HMAC-SHA256 hash; None = auth disabled
+    "proxy": {"enabled": False, "base_url": "", "api_key": ""},  # API proxy settings
+    "custom_providers": {},  # custom provider configs: {name: {base_url, api_key}}
 }
 _SETTINGS_LEGACY_DROP_KEYS = {"assistant_language"}
 _SETTINGS_THEME_VALUES = {"light", "dark", "system"}

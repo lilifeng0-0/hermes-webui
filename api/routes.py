@@ -11,9 +11,13 @@ import queue
 import sys
 import threading
 import time
+from time import strptime
 import uuid
 from pathlib import Path
 from urllib.parse import parse_qs
+
+import aiohttp
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -382,6 +386,358 @@ button:hover{background:rgba(124,185,255,.25)}
 <script src="/static/login.js"></script>
 </body></html>"""
 
+
+# ── Channel config: EKKOLearnAI-style two-layer storage ──────────────────────────
+# credentials  (tokens/secrets)  → ~/.hermes/.env       via PUT /api/hermes/config/credentials
+# behavior     (require_mention)  → ~/.hermes/config.yaml via PUT /api/hermes/config
+# ─────────────────────────────────────────────────────────────────────────────────
+
+HERMES_HOME    = Path.home() / ".hermes"
+_ENV_FILE     = HERMES_HOME / ".env"
+_CONFIG_FILE  = HERMES_HOME / "config.yaml"
+
+# Env-var name for each platform.credential key
+_CRED_MAP = {
+    "telegram":  {"bot_token": "TELEGRAM_BOT_TOKEN", "allowed_users": "TELEGRAM_ALLOWED_USERS",
+                  "home_channel": "TELEGRAM_HOME_CHANNEL", "home_channel_name": "TELEGRAM_HOME_CHANNEL_NAME"},
+    "discord":   {"bot_token": "DISCORD_BOT_TOKEN", "allowed_users": "DISCORD_ALLOWED_USERS"},
+    "slack":     {"bot_token": "SLACK_BOT_TOKEN",    "app_token":    "SLACK_APP_TOKEN",
+                  "allowed_users": "SLACK_ALLOWED_USERS"},
+    "whatsapp":  {"enabled": "WHATSAPP_ENABLED",    "allowed_users": "WHATSAPP_ALLOWED_USERS"},
+    "matrix":    {"access_token": "MATRIX_ACCESS_TOKEN", "homeserver": "MATRIX_HOMESERVER"},
+    "feishu":    {"app_id": "FEISHU_APP_ID", "app_secret": "FEISHU_APP_SECRET"},
+    "dingtalk":  {"client_id": "DINGTALK_CLIENT_ID", "client_secret": "DINGTALK_CLIENT_SECRET"},
+    "weixin":    {"token": "WEIXIN_TOKEN", "account_id": "WEIXIN_ACCOUNT_ID",
+                  "base_url": "WEIXIN_BASE_URL"},
+    "wecom":     {"bot_id": "WECOM_BOT_ID", "bot_secret": "WECOM_SECRET"},
+}
+
+# Reverse map: platform.key → env_var
+def _cred_env(platform: str, key: str) -> str:
+    return _CRED_MAP.get(platform, {}).get(key, "")
+
+
+def _read_env() -> dict:
+    env = {}
+    if _ENV_FILE.exists():
+        for line in _ENV_FILE.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+
+def _write_env_entry(platform: str, key: str, value) -> None:
+    env = _read_env()
+    env_key = _cred_env(platform, key)
+    if not env_key:
+        return
+    env[env_key] = "true" if value is True else "false" if value is False else str(value)
+    _write_env(env)
+
+
+def _write_env(env: dict) -> None:
+    lines = []
+    if _ENV_FILE.exists():
+        lines = _ENV_FILE.read_text().splitlines()
+    new_lines = []
+    seen_keys = set()
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            new_lines.append(line)
+            continue
+        if "=" in stripped:
+            k = stripped.split("=", 1)[0].strip()
+            if k in env:
+                new_lines.append(f"{k}={env[k]}")
+                seen_keys.add(k)
+                continue
+            else:
+                new_lines.append(line)
+                seen_keys.add(k)
+                continue
+        new_lines.append(line)
+    for k, v in env.items():
+        if k not in seen_keys:
+            new_lines.append(f"{k}={v}")
+    _ENV_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+
+def _read_yaml_config() -> dict:
+    if not _CONFIG_FILE.exists():
+        return {}
+    import yaml
+    with open(_CONFIG_FILE, "r") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _write_yaml_config(data: dict) -> None:
+    import yaml
+    with open(_CONFIG_FILE, "w") as f:
+        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+# ── GET /api/hermes/config/credentials ──────────────────────────────────────────
+def _get_credentials() -> dict:
+    env = _read_env()
+    result = {}
+    for platform, fields in _CRED_MAP.items():
+        result[platform] = {}
+        for key, env_var in fields.items():
+            if key == "enabled":
+                result[platform][key] = env.get(env_var, "").lower() == "true"
+            else:
+                result[platform][key] = env.get(env_var, "")
+    return result
+
+
+# ── PUT /api/hermes/config/credentials ──────────────────────────────────────────
+def _put_credentials(platform: str, values: dict) -> None:
+    for key, value in values.items():
+        _write_env_entry(platform, key, value)
+
+
+# ── GET /api/hermes/config ─────────────────────────────────────────────────────
+def _get_config() -> dict:
+    yaml_data = _read_yaml_config()
+    result = {}
+    for platform in _CRED_MAP.keys():
+        plat_data = yaml_data.get(platform, {})
+        if isinstance(plat_data, dict):
+            result[platform] = {
+                "require_mention": plat_data.get("require_mention", False),
+                "reactions": plat_data.get("reactions", False),
+                "auto_thread": plat_data.get("auto_thread", False),
+                "dm_mention_threads": plat_data.get("dm_mention_threads", False),
+                "allow_bots": plat_data.get("allow_bots", False),
+                "free_response_chats": plat_data.get("free_response_chats", ""),
+                "free_response_channels": plat_data.get("free_response_channels", ""),
+                "free_response_rooms": plat_data.get("free_response_rooms", ""),
+                "mention_patterns": plat_data.get("mention_patterns", ""),
+                "ignored_channels": plat_data.get("ignored_channels", ""),
+                "allowed_channels": plat_data.get("allowed_channels", ""),
+                "no_thread_channels": plat_data.get("no_thread_channels", ""),
+            }
+        else:
+            result[platform] = {}
+    return result
+
+
+# ── PUT /api/hermes/config ─────────────────────────────────────────────────────
+def _put_config(platform: str, values: dict) -> None:
+    yaml_data = _read_yaml_config()
+    if platform not in yaml_data:
+        yaml_data[platform] = {}
+    for k, v in values.items():
+        yaml_data[platform][k] = v
+    _write_yaml_config(yaml_data)
+
+
+# ── Legacy GET /api/channels (backward compat) ──────────────────────────────────
+def _read_channels() -> dict:
+    env = _read_env()
+    yaml_data = _read_yaml_config()
+    channels = {}
+    for platform in _CRED_MAP.keys():
+        creds = {}
+        for key, env_var in _CRED_MAP[platform].items():
+            if key == "enabled":
+                creds[key] = env.get(env_var, "").lower() == "true"
+            else:
+                creds[key] = env.get(env_var, "")
+        cfg = yaml_data.get(platform, {}) or {}
+        channels[platform] = {**creds, **cfg}
+    return channels
+
+
+# ── WeChat QR Login State ───────────────────────────────────────────────────────
+# Shared state for WeChat QR code login flow (keyed by session or constant)
+_WEIXIN_QR_READY = threading.Event()
+_WEIXIN_QR_STATE = {
+    "status": "idle",          # idle | scanning | scanned | confirmed | expired | error
+    "qrcode_value": "",
+    "qrcode_url": "",
+    "account_id": "",
+    "error": "",
+}
+
+
+async def _wechat_qr_fetch(hermes_home_str: str) -> None:
+    """Background coroutine: fetch QR code and poll until scan confirmed."""
+    import sys as _sys
+    # Add hermes-agent to path so we can import weixin
+    _agent_path = str(Path(hermes_home_str) / "hermes-agent")
+    if _agent_path not in _sys.path:
+        _sys.path.insert(0, _agent_path)
+
+    try:
+        from gateway.platforms.weixin import qr_login
+    except Exception as exc:
+        _WEIXIN_QR_STATE["status"] = "error"
+        _WEIXIN_QR_STATE["error"] = f"Failed to import weixin: {exc}"
+        return
+
+    try:
+        result = await asyncio.wait_for(
+            qr_login(hermes_home_str, bot_type="3", timeout_seconds=300),
+            timeout=320,
+        )
+        if result:
+            _WEIXIN_QR_STATE["status"] = "confirmed"
+            _WEIXIN_QR_STATE["account_id"] = result.get("account_id", "")
+            # Persist credentials to .env so they survive page reloads
+            try:
+                _write_env_entry("weixin", "account_id", result.get("account_id", ""))
+                _write_env_entry("weixin", "token", result.get("token", ""))
+                base_url = result.get("base_url", "")
+                if base_url:
+                    _write_env_entry("weixin", "base_url", base_url)
+            except Exception as exc:
+                logger.warning("Failed to persist Weixin credentials: %s", exc)
+        else:
+            _WEIXIN_QR_STATE["status"] = "expired"
+    except asyncio.TimeoutError:
+        _WEIXIN_QR_STATE["status"] = "expired"
+        _WEIXIN_QR_STATE["error"] = "QR code timed out (5 minutes)"
+    except Exception as exc:
+        _WEIXIN_QR_STATE["status"] = "error"
+        _WEIXIN_QR_STATE["error"] = str(exc)
+
+
+async def _wechat_qr_start(hermes_home_str: str) -> dict:
+    """Start the WeChat QR login: fetch initial QR code and return qrcode_url."""
+    import sys as _sys
+    _agent_path = str(Path(hermes_home_str) / "hermes-agent")
+    if _agent_path not in _sys.path:
+        _sys.path.insert(0, _agent_path)
+
+    ILINK_BASE_URL = "https://ilinkai.weixin.qq.com"
+    EP_GET_BOT_QR = "ilink/bot/get_bot_qrcode"
+    QR_TIMEOUT_MS = 35_000
+
+    try:
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.get(
+                f"{ILINK_BASE_URL}/{EP_GET_BOT_QR}?bot_type=3",
+                timeout=aiohttp.ClientTimeout(total=QR_TIMEOUT_MS / 1000),
+            ) as resp:
+                if resp.status != 200:
+                    return {"error": f"HTTP {resp.status}"}
+                raw = await resp.read()
+                import json as _json
+                qr_resp = _json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        return {"error": str(exc)}
+
+    qrcode_value = str(qr_resp.get("qrcode") or "")
+    qrcode_url = str(qr_resp.get("qrcode_img_content") or "")
+    if not qrcode_value:
+        return {"error": "No qrcode in response"}
+
+    # Update shared state for status polling
+    _WEIXIN_QR_STATE["status"] = "scanning"
+    _WEIXIN_QR_STATE["qrcode_value"] = qrcode_value
+    _WEIXIN_QR_STATE["qrcode_url"] = qrcode_url
+    _WEIXIN_QR_STATE["account_id"] = ""
+    _WEIXIN_QR_STATE["error"] = ""
+
+    # Start background status-polling coroutine (webui polls EP_GET_QR_STATUS while user scans)
+    asyncio.create_task(_wechat_qr_poll(hermes_home_str, qrcode_value, ILINK_BASE_URL))
+    _WEIXIN_QR_READY.set()
+    return {"qrcode_url": qrcode_url, "qrcode_value": qrcode_value}
+
+
+async def _wechat_qr_poll(hermes_home_str: str, qrcode_value: str, base_url: str) -> None:
+    """Poll EP_GET_QR_STATUS every 3s after QR is shown. Updates _WEIXIN_QR_STATE."""
+    ILINK_BASE_URL = base_url or "https://ilinkai.weixin.qq.com"
+    EP_GET_QR_STATUS = "ilink/bot/get_qrcode_status"
+    QR_TIMEOUT_MS = 35_000
+    import aiohttp as _aiohttp
+    import json as _json
+
+    deadline = time.time() + 300  # 5 minute max
+    while time.time() < deadline:
+        status_val = _WEIXIN_QR_STATE.get("status", "")
+        if status_val in ("confirmed", "expired", "error"):
+            return  # Final state already reached
+        await asyncio.sleep(3)
+        try:
+            async with _aiohttp.ClientSession(trust_env=True) as session:
+                async with session.get(
+                    f"{ILINK_BASE_URL}/{EP_GET_QR_STATUS}?qrcode={qrcode_value}",
+                    timeout=_aiohttp.ClientTimeout(total=QR_TIMEOUT_MS / 1000),
+                ) as resp:
+                    raw = await resp.read()
+                    qr_resp = _json.loads(raw.decode("utf-8"))
+        except Exception:
+            continue
+
+        status = str(qr_resp.get("status") or "wait")
+        if status == "wait":
+            _WEIXIN_QR_STATE["status"] = "scanning"
+        elif status == "scaned":
+            _WEIXIN_QR_STATE["status"] = "scaned"
+        elif status == "scaned_but_redirect":
+            redirect_host = str(qr_resp.get("redirect_host") or "")
+            if redirect_host and f"https://{redirect_host}" != base_url:
+                base_url = f"https://{redirect_host}"
+        elif status == "expired":
+            _WEIXIN_QR_STATE["status"] = "expired"
+            _WEIXIN_QR_STATE["error"] = "QR code expired"
+            return
+        elif status == "confirmed":
+            _WEIXIN_QR_STATE["status"] = "confirmed"
+            _WEIXIN_QR_STATE["account_id"] = str(qr_resp.get("ilink_bot_id") or "")
+            # Persist to .env
+            try:
+                _write_env_entry("weixin", "account_id", _WEIXIN_QR_STATE["account_id"])
+                _write_env_entry("weixin", "token", str(qr_resp.get("bot_token") or ""))
+                base_url_val = str(qr_resp.get("base_url") or "")
+                if base_url_val:
+                    _write_env_entry("weixin", "base_url", base_url_val)
+            except Exception as exc:
+                logger.warning("Failed to persist Weixin credentials: %s", exc)
+            return
+
+
+def _handle_weixin_qr_start(handler) -> bool:
+    """Start WeChat QR login flow (POST /api/channels/wechat/qr)."""
+    try:
+        hermes_home_parent = str(Path.home() / ".hermes")
+
+        def run_async_qr():
+            _WEIXIN_QR_READY.clear()
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            # Run the initial QR fetch (blocking, sets state then returns)
+            loop.run_until_complete(_wechat_qr_start(hermes_home_parent))
+            # Now loop forever so the background polling coroutine can execute
+            loop.run_forever()
+            loop.close()
+
+        t = threading.Thread(target=run_async_qr, daemon=True)
+        t.start()
+        # Wait for QR state to be populated by the thread
+        if not _WEIXIN_QR_READY.wait(timeout=15):
+            return j(handler, {"error": "Timeout fetching QR code"}, status=500)
+        return j(handler, {
+            "ok": True,
+            "qrcode_url": _WEIXIN_QR_STATE.get("qrcode_url", ""),
+            "qrcode_value": _WEIXIN_QR_STATE.get("qrcode_value", ""),
+        })
+    except Exception as exc:
+        return j(handler, {"error": str(exc)}, status=500)
+
+
+def _handle_weixin_qr_status(handler) -> bool:
+    """Poll WeChat QR login status (GET /api/channels/wechat/qr/status)."""
+    return j(handler, dict(_WEIXIN_QR_STATE))
+
+
 # ── GET routes ────────────────────────────────────────────────────────────────
 
 
@@ -457,11 +813,139 @@ def handle_get(handler, parsed) -> bool:
             },
         )
 
+    if parsed.path == "/api/channels/wechat/qr/status":
+        return _handle_weixin_qr_status(handler)
+
     if parsed.path == "/api/models":
         return j(handler, get_available_models())
 
     if parsed.path == "/api/models/live":
         return _handle_live_models(handler, parsed)
+
+    # EKKOLearnAI-style: /api/hermes/available-models
+    if parsed.path == "/api/hermes/available-models":
+        return j(handler, get_available_models())
+
+    # Update default model: PUT /api/hermes/config/model
+    if parsed.path == "/api/hermes/config/model" and handler.command == "PUT":
+        try:
+            body = read_body(handler)
+            data = json.loads(body) if body else {}
+            new_default = data.get("default", "").strip()
+            provider = data.get("provider", "").strip()
+            settings = load_settings()
+            if new_default:
+                settings["model"] = new_default
+            if provider:
+                settings["provider"] = provider
+            save_settings(settings)
+            return j(handler, {"ok": True, "default": new_default, "provider": provider})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # Custom provider management
+    if parsed.path == "/api/models/provider" and handler.command == "GET":
+        from api.config import load_custom_providers
+        providers = load_custom_providers()
+        groups = get_available_models().get("groups", [])
+        return j(handler, {"custom_providers": providers, "groups": groups})
+
+    # Usage stats endpoint
+    if parsed.path == "/api/usage":
+        try:
+            settings = load_settings()
+            sessions_dir = SESSION_DIR
+            total_tokens = 0
+            total_sessions = 0
+            input_tokens = 0
+            output_tokens = 0
+            cache_tokens = 0
+            by_model = {}
+            # daily: { date: {tokens, cache, sessions, cost} }
+            daily = {}
+            if sessions_dir.exists():
+                for f in sessions_dir.glob("*.json"):
+                    try:
+                        sess = json.loads(f.read_text())
+                        total_sessions += 1
+                        usage = sess.get("usage", {})
+                        inp = usage.get("input_tokens", 0)
+                        out = usage.get("output_tokens", 0)
+                        cache = usage.get("cache_read_tokens", 0) or usage.get("cached_tokens", 0)
+                        cost = inp * 0.00001 + out * 0.00003
+                        input_tokens += inp
+                        output_tokens += out
+                        cache_tokens += cache
+                        total_tokens += inp + out + cache
+                        model = sess.get("model", "unknown")
+                        if model not in by_model:
+                            by_model[model] = {"model": model, "input_tokens": 0, "output_tokens": 0, "cache_tokens": 0, "total_tokens": 0}
+                        by_model[model]["input_tokens"] += inp
+                        by_model[model]["output_tokens"] += out
+                        by_model[model]["cache_tokens"] += cache
+                        by_model[model]["total_tokens"] += inp + out + cache
+                        # daily aggregation with sessions + cost
+                        ts = sess.get("created_at") or sess.get("timestamp")
+                        day = None
+                        if ts:
+                            try:
+                                day = strptime(ts[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
+                            except Exception:
+                                pass
+                        if not day:
+                            import datetime
+                            day = datetime.date.today().isoformat()
+                        if day not in daily:
+                            daily[day] = {"tokens": 0, "cache": 0, "sessions": 0, "cost": 0.0}
+                        daily[day]["tokens"] += inp + out + cache
+                        daily[day]["cache"] += cache
+                        daily[day]["sessions"] += 1
+                        daily[day]["cost"] += cost
+                    except Exception:
+                        pass
+            return j(handler, {
+                "total_tokens": total_tokens,
+                "total_sessions": total_sessions,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cache_tokens": cache_tokens,
+                "by_model": list(by_model.values()),
+                "daily": daily,
+            })
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # ── Channels: GET only ──────────────────────────────────────────────────────
+    if parsed.path == "/api/channels":
+        try:
+            return j(handler, {"ok": True, "channels": _read_channels()})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # ── EKKOLearnAI-style credentials API ──────────────────────────────────────
+    if parsed.path == "/api/hermes/config/credentials":
+        try:
+            return j(handler, {"credentials": _get_credentials()})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # Parse query string for /api/hermes/config?section=...
+    if parsed.path == "/api/hermes/config":
+        from urllib.parse import parse_qs as _parse_qs
+        sections = _parse_qs(parsed.query).get("section", [])
+        section_list = sections[0].split(",") if sections else []
+        try:
+            all_config = _get_config()
+            if section_list:
+                result = {k: v for k, v in all_config.items() if k in section_list}
+            else:
+                result = all_config
+            return j(handler, result)
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    if parsed.path == "/api/hermes/weixin/qrcode/status":
+        return _handle_weixin_qr_status(handler)
 
     if parsed.path == "/api/settings":
         settings = load_settings()
@@ -707,11 +1191,15 @@ def handle_get(handler, parsed) -> bool:
 
     # ── Skills API (GET) ──
     if parsed.path == "/api/skills":
-        from tools.skills_tool import skills_list as _skills_list
+        from tools.skills_tool import skills_list as _skills_list, _find_all_skills as __find_all_skills
 
-        raw = _skills_list()
-        data = json.loads(raw) if isinstance(raw, str) else raw
-        return j(handler, {"skills": data.get("skills", [])})
+        # Use skip_disabled=True to show ALL skills (including disabled)
+        # so users can re-enable them via the toggle switch
+        all_skills = __find_all_skills(skip_disabled=True)
+        return j(handler, {"skills": all_skills})
+
+    if parsed.path == "/api/skills/status":
+        return _handle_skill_status(handler)
 
     if parsed.path == "/api/skills/content":
         from tools.skills_tool import skill_view as _skill_view, SKILLS_DIR
@@ -787,7 +1275,91 @@ def handle_get(handler, parsed) -> bool:
     return False  # 404
 
 
-# ── POST routes ───────────────────────────────────────────────────────────────
+# ── PUT routes ────────────────────────────────────────────────────────────────
+# (POST and PUT are handled by the same read_body JSON parsing, so PUT handlers
+#  reuse the same helpers as their POST counterparts)
+
+
+def handle_put(handler, parsed) -> bool:
+    """Handle all PUT routes. Returns True if handled, False for 404."""
+    from api.helpers import read_body as _read_body
+
+    if parsed.path == "/api/hermes/config/credentials":
+        try:
+            data = _read_body(handler)
+            platform = data.get("platform", "")
+            values = data.get("values", {})
+            if not platform:
+                return j(handler, {"error": "platform is required"}, status=400)
+            _put_credentials(platform, values)
+            return j(handler, {"ok": True})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    if parsed.path == "/api/hermes/config":
+        try:
+            data = _read_body(handler)
+            section = data.get("section", "")
+            values = data.get("values", {})
+            if not section:
+                return j(handler, {"error": "section is required"}, status=400)
+            _put_config(section, values)
+            return j(handler, {"ok": True})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # PUT /api/models/provider/{name} — update an existing custom provider
+    if parsed.path.startswith("/api/models/provider/") and handler.command == "PUT":
+        name = parsed.path[len("/api/models/provider/"):]
+        name = _html.unescape(name)
+        try:
+            data = _read_body(handler)
+            base_url = data.get("base_url", "").strip()
+            api_key = data.get("api_key", "").strip()
+            model = data.get("model", "").strip()
+            from api.config import load_custom_providers, save_custom_providers
+            providers = load_custom_providers()
+            found = False
+            for p in providers:
+                if p.get("name") == name:
+                    p["base_url"] = base_url
+                    p["api_key"] = api_key
+                    p["model"] = model
+                    found = True
+                    break
+            if not found:
+                return j(handler, {"error": f"Provider '{name}' not found"}, status=404)
+            save_custom_providers(providers)
+            return j(handler, {"ok": True})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    return False  # 404
+
+
+# ── DELETE routes ─────────────────────────────────────────────────────────────
+
+
+def handle_delete(handler, parsed) -> bool:
+    """Handle all DELETE routes. Returns True if handled, False for 404."""
+    from api.helpers import read_body as _read_body
+
+    if parsed.path.startswith("/api/models/provider/") and handler.command == "DELETE":
+        name = parsed.path[len("/api/models/provider/"):]
+        name = _html.unescape(name)
+        try:
+            from api.config import load_custom_providers, save_custom_providers
+            providers = load_custom_providers()
+            providers = [p for p in providers if p.get("name") != name]
+            save_custom_providers(providers)
+            return j(handler, {"ok": True})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    return False  # 404
+
+
+# ── POST routes ─────────────────────────────────────────────────────────────--
 
 
 def handle_post(handler, parsed) -> bool:
@@ -802,6 +1374,7 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/transcribe":
         return handle_transcribe(handler)
 
+<<<<<<< Updated upstream
     if parsed.path == "/api/canvas/new":
         from api.canvas import new_canvas
 
@@ -875,7 +1448,72 @@ def handle_post(handler, parsed) -> bool:
 
         return j(handler, {"path": rel_path, "width": width, "height": height})
 
+    if parsed.path == "/api/skills/upload":
+        return _handle_skill_upload(handler)
+
     body = read_body(handler)
+
+    if parsed.path == "/api/models/proxy-fetch":
+        return _handle_proxy_fetch(handler, body)
+
+    if parsed.path == "/api/models/provider" and handler.command == "POST":
+        try:
+            name = body.get("name", "").strip()
+            base_url = body.get("base_url", "").strip()
+            api_key = body.get("api_key", "").strip()
+            model = body.get("model", "").strip()
+            if not name or not base_url:
+                return j(handler, {"error": "name and base_url are required"}, status=400)
+            from api.config import load_custom_providers, save_custom_providers
+            providers = load_custom_providers()
+            # Replace existing entry with same name, or append new
+            providers = [p for p in providers if p.get("name") != name]
+            providers.append({"name": name, "base_url": base_url, "api_key": api_key, "model": model})
+            save_custom_providers(providers)
+            return j(handler, {"ok": True, "provider": name})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # POST /api/models/test — test a custom provider with a simple chat completion
+    if parsed.path == "/api/models/test" and handler.command == "POST":
+        try:
+            base_url = body.get("base_url", "").strip().rstrip("/")
+            api_key = body.get("api_key", "").strip()
+            model = body.get("model", "").strip()
+            if not base_url or not model:
+                return j(handler, {"error": "base_url and model are required"}, status=400)
+            # Use Python urllib to call the provider's chat completions
+            import urllib.request, json as _json
+            test_url = base_url + "/chat/completions"
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+            test_payload = {"model": model, "messages": [{"role": "user", "content": "Hi, reply with just the word 'ok'."}], "max_tokens": 10}
+            req = urllib.request.Request(test_url, data=_json.dumps(test_payload).encode(), headers=headers, method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    result = _json.loads(resp.read())
+                    if resp.status == 200:
+                        return j(handler, {"ok": True, "response": result})
+                    else:
+                        return j(handler, {"error": f"HTTP {resp.status}: {result}"}, status=resp.status)
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode("utf-8", errors="replace")
+                # Try to parse JSON error from provider
+                try:
+                    err_json = _json.loads(err_body)
+                    msg = err_json.get("error", {})
+                    if isinstance(msg, dict):
+                        msg = msg.get("message", err_body[:300])
+                    elif isinstance(msg, str):
+                        pass
+                    else:
+                        msg = str(msg)
+                except Exception:
+                    msg = err_body[:300]
+                return j(handler, {"error": msg}, status=e.code)
+            except urllib.error.URLError as e:
+                return j(handler, {"error": f"Connection failed: {e.reason}"}, status=502)
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
 
     if parsed.path == "/api/session/new":
         try:
@@ -1081,6 +1719,153 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/crons/run":
         return _handle_cron_run(handler, body)
 
+    # ── EKKOLearnAI-style PUT /api/hermes/config/credentials ─────────────────
+    if parsed.path == "/api/hermes/config/credentials":
+        try:
+            data = read_body(handler)
+            platform = data.get("platform", "")
+            values = data.get("values", {})
+            if not platform:
+                return j(handler, {"error": "platform is required"}, status=400)
+            _put_credentials(platform, values)
+            return j(handler, {"ok": True})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # ── EKKOLearnAI-style PUT /api/hermes/config ─────────────────────────────
+    if parsed.path == "/api/hermes/config":
+        try:
+            data = read_body(handler)
+            section = data.get("section", "")
+            values = data.get("values", {})
+            if not section:
+                return j(handler, {"error": "section is required"}, status=400)
+            _put_config(section, values)
+            return j(handler, {"ok": True})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # ── WeChat QR login: start POST /api/hermes/weixin/qrcode ────────────────
+    if parsed.path == "/api/hermes/weixin/qrcode":
+        return _handle_weixin_qr_start(handler)
+
+    # ── Legacy Channels: POST save ─────────────────────────────────────────────────────
+    if parsed.path == "/api/channels":
+        try:
+            body = read_body(handler)  # Already a dict (read_body parses JSON)
+            channels_data = body.get("channels", {})
+            restart = bool(body.get("restart_gateway", False))
+
+            # Backup .env
+            if _ENV_FILE.exists():
+                bak = _ENV_FILE.with_suffix(".env.bak")
+                bak.write_bytes(_ENV_FILE.read_bytes())
+
+            # Build updated env dict
+            env = _read_env()
+
+            tg = channels_data.get("telegram", {})
+            if "bot_token" in tg:
+                if tg["bot_token"]:
+                    env["TELEGRAM_BOT_TOKEN"] = tg["bot_token"]
+                else:
+                    env.pop("TELEGRAM_BOT_TOKEN", None)
+            if "allowed_users" in tg:
+                env["TELEGRAM_ALLOWED_USERS"] = tg["allowed_users"]
+            if "home_channel" in tg:
+                env["TELEGRAM_HOME_CHANNEL"] = tg["home_channel"]
+            if "home_channel_name" in tg:
+                env["TELEGRAM_HOME_CHANNEL_NAME"] = tg["home_channel_name"]
+
+            dc = channels_data.get("discord", {})
+            if "bot_token" in dc:
+                env["DISCORD_BOT_TOKEN"] = dc["bot_token"] if dc["bot_token"] else env.pop("DISCORD_BOT_TOKEN", None)
+            if "allowed_users" in dc:
+                env["DISCORD_ALLOWED_USERS"] = dc["allowed_users"]
+
+            sl = channels_data.get("slack", {})
+            if "bot_token" in sl:
+                env["SLACK_BOT_TOKEN"] = sl["bot_token"] if sl["bot_token"] else env.pop("SLACK_BOT_TOKEN", None)
+            if "app_token" in sl:
+                env["SLACK_APP_TOKEN"] = sl["app_token"] if sl["app_token"] else env.pop("SLACK_APP_TOKEN", None)
+            if "allowed_users" in sl:
+                env["SLACK_ALLOWED_USERS"] = sl["allowed_users"]
+
+            wa = channels_data.get("whatsapp", {})
+            env["WHATSAPP_ENABLED"] = "true" if wa.get("enabled") else "false"
+            if "allowed_users" in wa:
+                env["WHATSAPP_ALLOWED_USERS"] = wa["allowed_users"]
+
+            mx = channels_data.get("matrix", {})
+            if "access_token" in mx:
+                env["MATRIX_ACCESS_TOKEN"] = mx["access_token"] if mx["access_token"] else env.pop("MATRIX_ACCESS_TOKEN", None)
+            if "homeserver" in mx:
+                env["MATRIX_HOMESERVER"] = mx["homeserver"]
+
+            fs = channels_data.get("feishu", {})
+            if "app_id" in fs:
+                env["FEISHU_APP_ID"] = fs["app_id"] if fs["app_id"] else env.pop("FEISHU_APP_ID", None)
+            if "app_secret" in fs:
+                env["FEISHU_APP_SECRET"] = fs["app_secret"] if fs["app_secret"] else env.pop("FEISHU_APP_SECRET", None)
+
+            wc = channels_data.get("wecom", {})
+            if "bot_id" in wc:
+                env["WECOM_BOT_ID"] = wc["bot_id"] if wc["bot_id"] else env.pop("WECOM_BOT_ID", None)
+            if "bot_secret" in wc:
+                env["WECOM_BOT_SECRET"] = wc["bot_secret"] if wc["bot_secret"] else env.pop("WECOM_BOT_SECRET", None)
+
+            _write_env(env)
+
+            # Update config.yaml channels section
+            try:
+                import yaml
+                if _CONFIG_FILE.exists():
+                    cfg = yaml.safe_load(_CONFIG_FILE.read_text(encoding="utf-8")) or {}
+                else:
+                    cfg = {}
+                if "channels" not in cfg:
+                    cfg["channels"] = {}
+                for platform in ["telegram","discord","slack","whatsapp","matrix","feishu","wecom"]:
+                    pdata = channels_data.get(platform, {})
+                    cfg["channels"][platform] = {"mention_only": bool(pdata.get("mention_only"))}
+                _CONFIG_FILE.write_text(
+                    yaml.safe_dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
+                    encoding="utf-8"
+                )
+            except Exception:
+                pass
+
+            restart_msg = ""
+            if restart:
+                import subprocess as _subprocess
+                hermes_bin = None
+                for candidate in [
+                    os.getenv("HERMES_WEBUI_AGENT_DIR", ""),
+                    (Path.home() / ".hermes" / "hermes-agent").as_posix(),
+                ]:
+                    if candidate:
+                        hb = Path(candidate) / "bin" / "hermes"
+                        if hb.exists():
+                            hermes_bin = str(hb)
+                            break
+                if hermes_bin:
+                    try:
+                        _subprocess.run([hermes_bin, "gateway", "restart"],
+                                      capture_output=True, timeout=30)
+                        restart_msg = " Gateway restarted."
+                    except Exception as ex:
+                        restart_msg = f" Gateway restart attempted but failed: {ex}"
+                else:
+                    restart_msg = " hermes binary not found; please restart gateway manually."
+
+            return j(handler, {"ok": True, "message": "Channels saved." + restart_msg})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
+    # ── WeChat QR Login: start (POST /api/channels/wechat/qr) ────────────────────
+    if parsed.path == "/api/channels/wechat/qr":
+        return _handle_weixin_qr_start(handler)
+
     if parsed.path == "/api/crons/pause":
         return _handle_cron_pause(handler, body)
 
@@ -1127,6 +1912,9 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/skills/delete":
         return _handle_skill_delete(handler, body)
+
+    if parsed.path == "/api/skills/toggle":
+        return _handle_skill_toggle(handler, body)
 
     # ── Memory (POST) ──
     if parsed.path == "/api/memory/write":
@@ -1935,6 +2723,54 @@ def _handle_clarify_inject(handler, parsed):
         )
         return j(handler, {"ok": True, "session_id": sid})
     return j(handler, {"error": "session_id required"}, status=400)
+
+
+def _handle_proxy_fetch(handler, body) -> bool:
+    """Proxy fetch models from any provider URL (bypasses browser CORS).
+
+    body should be a dict with keys:
+      url      — base URL of the provider API
+      api_key  — optional API key for Authorization header
+    """
+    import urllib.request
+    import urllib.error
+
+    url = (body.get("url") or "").strip()
+    api_key = (body.get("api_key") or "").strip()
+    if not url:
+        return j(handler, {"error": "url required"}, status=400)
+
+    normalized = url if url.endswith("/v1") else url.rstrip("/") + "/v1"
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        req = urllib.request.Request(
+            normalized + "/models",
+            headers=headers,
+            method="GET"
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            try:
+                parsed_resp = json.loads(raw.decode("utf-8"))
+                models = parsed_resp.get("data") or parsed_resp.get("models") or []
+                model_ids = sorted(set(
+                    m.get("id") or m.get("name") or str(m) for m in models
+                ))
+                return j(handler, {"models": model_ids, "count": len(model_ids)})
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return j(handler, {
+                    "raw": raw.decode("utf-8", errors="replace"),
+                    "models": [], "count": 0
+                })
+    except urllib.error.HTTPError as e:
+        return j(handler, {"error": f"HTTP {e.code}"}, status=e.code)
+    except urllib.error.URLError as e:
+        return j(handler, {"error": f"Network error: {e.reason}"}, status=502)
+    except Exception as e:
+        return j(handler, {"error": str(e)}, status=500)
 
 
 def _handle_live_models(handler, parsed):
@@ -2929,6 +3765,180 @@ def _handle_skill_delete(handler, body):
     skill_dir = matches[0].parent
     shutil.rmtree(str(skill_dir))
     return j(handler, {"ok": True, "name": body["name"]})
+
+
+def _handle_skill_status(handler):
+    """Get list of disabled skills."""
+    try:
+        from tools.skills_tool import _get_disabled_skill_names
+        disabled = list(_get_disabled_skill_names())
+        return j(handler, {"disabled": disabled})
+    except Exception as e:
+        return j(handler, {"disabled": []})
+
+
+def _handle_skill_toggle(handler, body):
+    """Toggle a skill's enabled/disabled state."""
+    try:
+        require(body, "name", "enabled")
+    except ValueError as e:
+        return bad(handler, str(e))
+
+    skill_name = body["name"]
+    enabled = body["enabled"]
+
+    try:
+        from hermes_cli.config import load_config, save_config
+
+        config = load_config()
+        skills_cfg = config.get("skills", {})
+        disabled = skills_cfg.get("disabled", [])
+
+        if enabled:
+            # Remove from disabled list
+            if skill_name in disabled:
+                disabled.remove(skill_name)
+        else:
+            # Add to disabled list
+            if skill_name not in disabled:
+                disabled.append(skill_name)
+
+        skills_cfg["disabled"] = disabled
+        config["skills"] = skills_cfg
+        save_config(config)
+
+        return j(handler, {"ok": True, "name": skill_name, "enabled": enabled})
+    except Exception as e:
+        return bad(handler, str(e))
+
+
+def _handle_skill_upload(handler):
+    """Handle skill file upload (.zip or .skill format).
+    
+    Supports:
+    - .zip archives (extracted recursively with subdirectories)
+    - .skill directories (copied as-is with all subdirectories)
+    """
+    import io
+    import zipfile
+    import tempfile
+    import shutil
+    from api.upload import parse_multipart
+    from api.config import MAX_UPLOAD_BYTES
+
+    try:
+        from tools.skills_tool import SKILLS_DIR
+
+        content_type = handler.headers.get('Content-Type', '')
+        content_length = int(handler.headers.get('Content-Length', 0) or 0)
+        
+        if content_length == 0:
+            return j(handler, {'error': 'No file uploaded'}, status=400)
+        
+        if content_length > MAX_UPLOAD_BYTES:
+            return j(handler, {'error': f'File too large (max {MAX_UPLOAD_BYTES//1024//1024}MB)'}, status=413)
+
+        # Use existing multipart parser
+        fields, files = parse_multipart(handler.rfile, content_type, content_length)
+        
+        if 'file' not in files:
+            return j(handler, {'error': 'No file field in request'}, status=400)
+        
+        filename, file_bytes = files['file']
+        if not filename:
+            return j(handler, {'error': 'No filename in upload'}, status=400)
+
+        # Sanitize filename
+        safe_filename = filename.replace("..", "").replace("/", "").replace("\\", "")
+        file_ext = safe_filename.lower()
+
+        # Create temp directory for extraction
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            if file_ext.endswith(".zip"):
+                # Extract zip file
+                zip_path = temp_path / safe_filename
+                zip_path.write_bytes(file_bytes)
+
+                with zipfile.ZipFile(zip_path, "r") as zf:
+                    zf.extractall(temp_path)
+
+                # Find SKILL.md in extracted content
+                skill_dirs = list(temp_path.rglob("SKILL.md"))
+                if not skill_dirs:
+                    return j(handler, {'error': 'No SKILL.md found in zip archive'}, status=400)
+
+                # Get the root skill directory (parent of SKILL.md)
+                skill_dir = skill_dirs[0].parent
+                skill_name = skill_dir.name
+
+            elif file_ext.endswith(".skill"):
+                # .skill file is actually a directory structure (zip without .zip extension)
+                try:
+                    with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as zf:
+                        zf.extractall(temp_path)
+
+                    # Find SKILL.md
+                    skill_dirs = list(temp_path.rglob("SKILL.md"))
+                    if not skill_dirs:
+                        return j(handler, {'error': 'No SKILL.md found in .skill archive'}, status=400)
+                    skill_dir = skill_dirs[0].parent
+                    skill_name = skill_dir.name
+
+                except zipfile.BadZipFile:
+                    # Treat as raw skill content
+                    try:
+                        content_str = file_bytes.decode("utf-8")
+                        if content_str.strip().startswith("#"):
+                            skill_dir = temp_path / "uploaded-skill"
+                            skill_dir.mkdir(exist_ok=True)
+                            (skill_dir / "SKILL.md").write_text(content_str, encoding="utf-8")
+                            skill_name = "uploaded-skill"
+                        else:
+                            return j(handler, {'error': 'Invalid .skill file format'}, status=400)
+                    except UnicodeDecodeError:
+                        return j(handler, {'error': 'Invalid .skill file - not a valid archive or text file'}, status=400)
+            else:
+                return j(handler, {'error': 'Unsupported file format. Use .zip or .skill'}, status=400)
+
+            # Validate skill name
+            if not skill_name or "/" in skill_name or ".." in skill_name:
+                return j(handler, {'error': 'Invalid skill name in archive'}, status=400)
+
+            # Determine target directory
+            target_dir = SKILLS_DIR / skill_name
+
+            # Ensure parent directory exists
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+
+            # Copy extracted content to skills directory
+            if skill_dir.parent != temp_path:
+                # The skill is in a subdirectory, copy that subdirectory
+                if target_dir.exists():
+                    shutil.rmtree(str(target_dir))
+                shutil.copytree(skill_dir, target_dir)
+            else:
+                # Copy all files from temp to target
+                if target_dir.exists():
+                    # Merge: update existing files, keep new ones
+                    for item in skill_dir.rglob("*"):
+                        if item.is_file():
+                            rel_path = item.relative_to(skill_dir)
+                            target_file = target_dir / rel_path
+                            target_file.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(item, target_file)
+                else:
+                    shutil.copytree(skill_dir, target_dir)
+
+        return j(handler, {"ok": True, "name": skill_name, "path": str(target_dir)})
+
+    except zipfile.BadZipFile:
+        return j(handler, {'error': 'Invalid zip archive'}, status=400)
+    except Exception as e:
+        import traceback
+        print('[webui] skill upload error: ' + traceback.format_exc(), flush=True)
+        return j(handler, {'error': f'Upload failed: {str(e)}'}, status=500)
 
 
 def _handle_memory_write(handler, body):

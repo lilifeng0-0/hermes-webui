@@ -185,18 +185,23 @@ $('btnAttach').onclick=()=>$('fileInput').click();
   const _canRecordAudio=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder);
   if(!SpeechRecognition&&!_canRecordAudio) return; // Browser unsupported — mic button stays hidden
 
+  // Persist SR failure across reloads (e.g. Tailscale/network error)
+  const _micForceMediaRecorderKey='mic_force_mediarecorder';
+  let _forceMediaRecorder=!SpeechRecognition||localStorage.getItem(_micForceMediaRecorderKey)==='1';
+
   const btn=$('btnMic');
   const status=$('micStatus');
   const ta=$('msg');
   const statusText=status?status.querySelector('.status-text'):null;
   btn.style.display=''; // Show button — browser supports speech recognition or recording fallback
 
-  let recognition=SpeechRecognition?new SpeechRecognition():null;
+  let recognition=(!_forceMediaRecorder&&SpeechRecognition)?new SpeechRecognition():null;
   let mediaRecorder=null;
   let mediaStream=null;
   let audioChunks=[];
   let _finalText='';
   let _prefix='';
+  let _isRecording=false;
 
   function _setRecording(on){
     window._micActive=on;
@@ -261,7 +266,7 @@ $('btnAttach').onclick=()=>$('fileInput').click();
   }
   window._stopMic=_stopMic; // expose for send-guard above
 
-  if(recognition){
+  if(recognition && !_forceMediaRecorder){
     recognition.continuous=false;
     recognition.interimResults=true;
     recognition.lang=(typeof _locale!=='undefined'&&_locale._speech)||'en-US';
@@ -298,6 +303,13 @@ $('btnAttach').onclick=()=>$('fileInput').click();
     recognition.onerror=(event)=>{
       _setRecording(false);
       window._micPendingSend=false;
+      _isRecording=false;
+      if(event.error==='network'||event.error==='not-allowed'){
+        // Persist SR failure: next reload will skip SpeechRecognition
+        localStorage.setItem(_micForceMediaRecorderKey,'1');
+        _forceMediaRecorder=true;
+        recognition=null;
+      }
       const msgs={
         'not-allowed':t('mic_denied'),
         'no-speech':t('mic_no_speech'),
@@ -308,18 +320,26 @@ $('btnAttach').onclick=()=>$('fileInput').click();
   }
 
   btn.onclick=async()=>{
+    // Race-condition guard: ignore rapid double-clicks
+    if(_isRecording){
+      _stopMic();
+      _isRecording=false;
+      return;
+    }
     if(window._micActive){
       _stopMic();
       return;
     }
+    _isRecording=true;
     _finalText='';
     _prefix=ta.value;
-    if(recognition){
+    if(recognition && !_forceMediaRecorder){
       recognition.start();
       _setRecording(true);
       return;
     }
     if(!_canRecordAudio){
+      _isRecording=false;
       showToast(t('mic_network'));
       return;
     }
@@ -331,12 +351,14 @@ $('btnAttach').onclick=()=>$('fileInput').click();
       audioChunks=[];
       mediaRecorder.ondataavailable=e=>{if(e.data&&e.data.size)audioChunks.push(e.data);};
       mediaRecorder.onerror=()=>{
+        _isRecording=false;
         _setRecording(false);
         window._micPendingSend=false;
         _stopTracks();
         showToast(t('mic_network'));
       };
       mediaRecorder.onstop=async()=>{
+        _isRecording=false;
         const blob=new Blob(audioChunks,{type:mediaRecorder.mimeType||mimeType||'audio/webm'});
         _setRecording(false);
         _stopTracks();
@@ -348,6 +370,7 @@ $('btnAttach').onclick=()=>$('fileInput').click();
       mediaRecorder.start();
       _setRecording(true);
     }catch(err){
+      _isRecording=false;
       window._micPendingSend=false;
       _stopTracks();
       showToast(t('mic_denied'));

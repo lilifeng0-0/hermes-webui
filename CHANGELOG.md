@@ -1,5 +1,10 @@
 # Hermes Web UI -- Changelog
 
+## [v0.50.94] — 2026-04-19
+
+### Fixed
+- **Mic toggle is now race-safe and works over Tailscale** — rapid click/toggle no longer leaves recording in inconsistent state (`_isRecording` flag with proper reset in all paths). `recognition.start()` is now correctly called (was previously only present in a comment string, so SpeechRecognition never started and the Tailscale fallback never fired). Falls back to `MediaRecorder` when `speech.googleapis.com` is unreachable. Browser capability preference persisted in `localStorage` across reloads. (PR #683 by @MatzAgent)
+
 ## [v0.50.93] — 2026-04-19
 
 ### Fixed

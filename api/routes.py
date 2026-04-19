@@ -801,6 +801,47 @@ def handle_post(handler, parsed) -> bool:
         except KeyError:
             return bad(handler, "Canvas not found", 404)
 
+    if parsed.path == "/api/canvas/upload":
+        from api.upload import parse_multipart
+        from api.config import REPO_ROOT
+
+        content_type = handler.headers.get("Content-Type", "")
+        content_length = int(handler.headers.get("Content-Length", 0) or 0)
+        if content_length > MAX_UPLOAD_BYTES:
+            return j(handler, {"error": f"File too large (max {MAX_UPLOAD_BYTES // 1024 // 1024}MB)"}, status=413)
+        try:
+            fields, files = parse_multipart(handler.rfile, content_type, content_length)
+        except ValueError as e:
+            return j(handler, {"error": str(e)}, status=400)
+
+        canvas_id = fields.get("canvas_id", "")
+        component_id = fields.get("component_id", "")
+        if "file" not in files:
+            return j(handler, {"error": "No file field in request"}, status=400)
+        filename, file_data = files["file"]
+        if not filename:
+            return j(handler, {"error": "No filename in upload"}, status=400)
+
+        # Save to temp/canvas/attachments/{canvas_id}/{component_id}_{filename}
+        attach_dir = REPO_ROOT / "temp" / "canvas" / "attachments" / canvas_id
+        attach_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = f"{component_id}_{filename}"
+        file_path = attach_dir / safe_name
+        file_path.write_bytes(file_data)
+
+        rel_path = f"temp/canvas/attachments/{canvas_id}/{safe_name}"
+
+        # Get image dimensions
+        width, height = 200, 150
+        try:
+            from PIL import Image
+            img = Image.open(file_path)
+            width, height = img.size
+        except Exception:
+            pass
+
+        return j(handler, {"path": rel_path, "width": width, "height": height})
+
     body = read_body(handler)
 
     if parsed.path == "/api/session/new":

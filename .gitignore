@@ -36,3 +36,6 @@ Thumbs.db
 docs/*
 !docs/ui-ux/
 !docs/ui-ux/**
+
+# Git worktrees
+.worktrees/

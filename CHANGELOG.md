@@ -16,6 +16,11 @@
 ## [v0.50.89] — 2026-04-19
 
 ### Fixed
+- **Explicit UTF-8 encoding on all config/profile reads** — `Path.read_text()` calls in `api/config.py` and `api/profiles.py` now always specify `encoding="utf-8"`. On Windows systems with a non-UTF-8 default locale (e.g. GBK on Chinese Windows, Shift_JIS on Japanese Windows), omitting the encoding argument caused silent config loading failures. (PR #700 by @woaijiadanoo)
+
+## [v0.50.88] — 2026-04-19
+
+### Fixed
 - **System Preferences model dropdown no longer misattributes the default model to unrelated providers** — the `/api/models` builder no longer injects the global `default_model` into unknown provider groups such as `Alibaba` or `Minimax-Cn`. When a provider has no real model catalog of its own, it is now omitted from the dropdown instead of showing a misleading placeholder like `gpt-5.4-mini`. If the active provider still needs a default fallback, it is shown in a separate `Default` group rather than being mixed into another provider's models.
 
 ## [v0.50.85] — 2026-04-18

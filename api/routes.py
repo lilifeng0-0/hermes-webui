@@ -739,6 +739,18 @@ def handle_get(handler, parsed) -> bool:
             {"name": get_active_profile_name(), "path": str(get_active_hermes_home())},
         )
 
+    # ── Canvas API (GET) ──
+    if parsed.path == "/api/canvas":
+        from api.canvas import list_canvases, load_canvas
+
+        canvas_id = parse_qs(parsed.query).get("canvas_id", [""])[0]
+        if canvas_id:
+            try:
+                return j(handler, {"canvas": load_canvas(canvas_id)})
+            except KeyError:
+                return bad(handler, "Canvas not found", 404)
+        return j(handler, {"canvases": list_canvases()})
+
     return False  # 404
 
 
@@ -756,6 +768,38 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/transcribe":
         return handle_transcribe(handler)
+
+    if parsed.path == "/api/canvas/new":
+        from api.canvas import new_canvas
+
+        body = read_body(handler)
+        name = body.get("name", "Untitled") if body else "Untitled"
+        canvas = new_canvas(name=name)
+        return j(handler, {"canvas": canvas})
+
+    if parsed.path == "/api/canvas/save":
+        from api.canvas import save_canvas
+        body = read_body(handler)
+        canvas_id = body.get("canvas_id") if body else None
+        if not canvas_id:
+            return bad(handler, "Missing canvas_id", 400)
+        try:
+            canvas = save_canvas(canvas_id, body)
+            return j(handler, {"canvas": canvas})
+        except KeyError:
+            return bad(handler, "Canvas not found", 404)
+
+    if parsed.path == "/api/canvas/delete":
+        from api.canvas import delete_canvas
+        body = read_body(handler)
+        canvas_id = body.get("canvas_id") if body else None
+        if not canvas_id:
+            return bad(handler, "Missing canvas_id", 400)
+        try:
+            delete_canvas(canvas_id)
+            return j(handler, {"ok": True})
+        except KeyError:
+            return bad(handler, "Canvas not found", 404)
 
     body = read_body(handler)
 

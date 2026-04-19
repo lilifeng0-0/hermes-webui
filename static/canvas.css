@@ -124,7 +124,7 @@ body {
 
 .connection-path:hover {
   stroke: #4a90d9;
-  stroke-width: 3;
+  stroke-width: 2.5;
 }
 
 .connection-path.selected {

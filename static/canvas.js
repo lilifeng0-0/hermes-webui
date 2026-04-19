@@ -678,7 +678,7 @@
       getConnectionPath(conn) {
         const fromComp = this.currentComponents.find(c => c.id === conn.from);
         const toComp = this.currentComponents.find(c => c.id === conn.to);
-        if (!fromComp || !toComp) return '';
+        if (!fromComp || !toComp || !fromComp.width || !fromComp.height || !toComp.width || !toComp.height) return '';
 
         // 计算端口位置（默认从组件中心到中心）
         const fromPort = conn.fromPort || 'right';
@@ -745,7 +745,7 @@
       getConnectionPorts(conn) {
         const fromComp = this.currentComponents.find(c => c.id === conn.from);
         const toComp = this.currentComponents.find(c => c.id === conn.to);
-        if (!fromComp || !toComp) return [];
+        if (!fromComp || !toComp || !fromComp.width || !fromComp.height || !toComp.width || !toComp.height) return [];
         const fromPort = conn.fromPort || 'right';
         const toPort = conn.toPort || 'left';
         const fromPos = this.getPortPosition(fromComp, fromPort);

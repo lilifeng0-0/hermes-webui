@@ -66,7 +66,7 @@
            @contextmenu.prevent="onContextMenu">
         <div class="canvas-transform" :style="transformStyle">
           <!-- SVG连接线层 -->
-          <svg class="connections-layer" :style="{width: canvasAreaWidth + 'px', height: canvasAreaHeight + 'px'}">
+          <svg class="connections-layer" :style="{width: canvasAreaWidth + 'px', height: canvasAreaHeight + 'px', transform: `scale(${zoom})`}">
             <defs>
               <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
                 <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>

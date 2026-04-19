@@ -38,6 +38,8 @@
         toast: { visible: false, message: '' },
         saveTimer: null,
         toasts: [],
+        canvasAreaWidth: 3000,
+        canvasAreaHeight: 2000,
       };
     },
 
@@ -670,6 +672,95 @@
           .replace(/\*(.+?)\*/g, '<em>$1</em>')
           .replace(/`(.+?)`/g, '<code>$1</code>')
           .replace(/\n/g, '<br>');
+      },
+
+      // ── 连接线渲染 ─────────────────────────────────────────────────
+      getConnectionPath(conn) {
+        const fromComp = this.currentComponents.find(c => c.id === conn.from);
+        const toComp = this.currentComponents.find(c => c.id === conn.to);
+        if (!fromComp || !toComp) return '';
+
+        // 计算端口位置（默认从组件中心到中心）
+        const fromPort = conn.fromPort || 'right';
+        const toPort = conn.toPort || 'left';
+
+        // 获取连接点坐标
+        const fromPos = this.getPortPosition(fromComp, fromPort);
+        const toPos = this.getPortPosition(toComp, toPort);
+
+        // 计算控制点偏移（用于贝塞尔曲线）
+        const dx = toPos.x - fromPos.x;
+        const dy = toPos.y - fromPos.y;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        // 根据连接方向选择控制点策略
+        let cp1x, cp1y, cp2x, cp2y;
+
+        if (absDx > absDy) {
+          // 水平方向为主 - 使用水平贝塞尔
+          const offset = Math.max(50, absDx * 0.4);
+          if (fromPort === 'right' || fromPort === 'left') {
+            cp1x = fromPos.x + (fromPort === 'right' ? offset : -offset);
+            cp1y = fromPos.y;
+            cp2x = toPos.x + (toPort === 'left' ? -offset : offset);
+            cp2y = toPos.y;
+          } else {
+            cp1x = fromPos.x;
+            cp1y = fromPos.y + (fromPort === 'bottom' ? offset : -offset);
+            cp2x = toPos.x;
+            cp2y = toPos.y + (toPort === 'top' ? -offset : offset);
+          }
+        } else {
+          // 垂直方向为主 - 使用垂直贝塞尔
+          const offset = Math.max(50, absDy * 0.4);
+          if (fromPort === 'top' || fromPort === 'bottom') {
+            cp1x = fromPos.x;
+            cp1y = fromPos.y + (fromPort === 'bottom' ? offset : -offset);
+            cp2x = toPos.x;
+            cp2y = toPos.y + (toPort === 'top' ? -offset : offset);
+          } else {
+            cp1x = fromPos.x + (fromPort === 'right' ? offset : -offset);
+            cp1y = fromPos.y;
+            cp2x = toPos.x + (toPort === 'left' ? -offset : offset);
+            cp2y = toPos.y;
+          }
+        }
+
+        return `M ${fromPos.x} ${fromPos.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${toPos.x} ${toPos.y}`;
+      },
+
+      getPortPosition(comp, port) {
+        const cx = comp.x + comp.width / 2;
+        const cy = comp.y + comp.height / 2;
+        switch (port) {
+          case 'top': return { x: cx, y: comp.y };
+          case 'bottom': return { x: cx, y: comp.y + comp.height };
+          case 'left': return { x: comp.x, y: cy };
+          case 'right': return { x: comp.x + comp.width, y: cy };
+          default: return { x: cx, y: cy };
+        }
+      },
+
+      getConnectionPorts(conn) {
+        const fromComp = this.currentComponents.find(c => c.id === conn.from);
+        const toComp = this.currentComponents.find(c => c.id === conn.to);
+        if (!fromComp || !toComp) return [];
+        const fromPort = conn.fromPort || 'right';
+        const toPort = conn.toPort || 'left';
+        const fromPos = this.getPortPosition(fromComp, fromPort);
+        const toPos = this.getPortPosition(toComp, toPort);
+        return [
+          { id: conn.id + '-from', cx: fromPos.x, cy: fromPos.y },
+          { id: conn.id + '-to', cx: toPos.x, cy: toPos.y }
+        ];
+      },
+
+      onConnectionClick(conn) {
+        // 选中连接线（通过选中起点或终点组件）
+        if (!this.selectedIds.includes(conn.from)) {
+          this.selectedIds = [conn.from, conn.to];
+        }
       },
 
       // ── Hermes 交互 ──────────────────────────────────────────────

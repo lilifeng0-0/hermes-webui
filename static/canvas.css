@@ -105,6 +105,33 @@ body {
   transform-origin: 0 0;
 }
 
+/* SVG连接线层 */
+.connections-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.connection-path {
+  fill: none;
+  stroke: #666;
+  stroke-width: 2;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connection-path:hover {
+  stroke: #4a90d9;
+  stroke-width: 3;
+}
+
+.connection-path.selected {
+  stroke: #4a90d9;
+  stroke-width: 2.5;
+}
+
 /* 组件通用 */
 .canvas-component {
   position: absolute;

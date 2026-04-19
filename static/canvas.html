@@ -65,6 +65,26 @@
            @click="onCanvasClick"
            @contextmenu.prevent="onContextMenu">
         <div class="canvas-transform" :style="transformStyle">
+          <!-- SVG连接线层 -->
+          <svg class="connections-layer" :style="{width: canvasAreaWidth + 'px', height: canvasAreaHeight + 'px'}">
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+              </marker>
+              <marker id="arrowhead-selected" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#4a90d9"/>
+              </marker>
+            </defs>
+            <g v-for="conn in currentConnections" :key="conn.id">
+              <path :d="getConnectionPath(conn)" class="connection-path"
+                    :class="{selected: selectedIds.includes(conn.from) || selectedIds.includes(conn.to)}"
+                    @click.stop="onConnectionClick(conn)"/>
+              <circle v-for="port in getConnectionPorts(conn)" :key="port.id"
+                      :cx="port.cx" :cy="port.cy" r="5" fill="#4a90d9"
+                      style="pointer-events:all;cursor:crosshair" />
+            </g>
+          </svg>
+
           <!-- 组件渲染 -->
           <div v-for="comp in currentComponents" :key="comp.id"
                class="canvas-component"

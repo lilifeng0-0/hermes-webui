@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>万能画布</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="/static/canvas.css">
+</head>
+<body>
+  <div id="app">
+    <div class="canvas-container">
+      <!-- 工具栏 -->
+      <div class="canvas-toolbar" v-if="canvas">
+        <button class="toolbar-btn" :class="{active: tool === 'select'}" @click="setTool('select')" title="选择/移动">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 3l14 9-7 1-4 7z"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" @click="triggerImageUpload" title="上传图片">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <path d="M21 15l-5-5L5 21"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" @click="triggerVideoUpload" title="上传视频">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="23 7 16 12 23 17 23 7"/>
+            <rect x="1" y="5" width="15" height="14" rx="2"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" :class="{active: tool === 'rect'}" @click="setTool('rect')" title="矩形">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" :class="{active: tool === 'text'}" @click="setTool('text')" title="文字">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7V4h16v3"/><path d="M12 4v16"/><path d="M8 20h8"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" @click="showSkillsDropdown = !showSkillsDropdown" title="Skills">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
+          <div v-if="showSkillsDropdown" class="skills-dropdown" @click.stop>
+            <div v-for="skill in skills" :key="skill.name" class="skill-item"
+                 @click="addSkillToCanvas(skill)">
+              <strong>{{ skill.name }}</strong>
+              <p>{{ skill.description }}</p>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      <!-- 画布区域 -->
+      <div class="canvas-area"
+           id="canvasArea"
+           :style="{cursor: isPanning ? 'grab' : (tool === 'rect' ? 'crosshair' : 'default')}"
+           @wheel.prevent="onWheel"
+           @mousedown="onCanvasMouseDown"
+           @mousemove="onCanvasMouseMove"
+           @mouseup="onCanvasMouseUp"
+           @click="onCanvasClick"
+           @contextmenu.prevent="onContextMenu">
+        <div class="canvas-transform" :style="transformStyle">
+          <!-- SVG连接线层 -->
+          <svg class="connections-layer" :style="{width: canvasAreaWidth + 'px', height: canvasAreaHeight + 'px', transform: `scale(${zoom})`}">
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+              </marker>
+              <marker id="arrowhead-selected" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#4a90d9"/>
+              </marker>
+            </defs>
+            <g v-for="conn in currentConnections" :key="conn.id">
+              <path :d="getConnectionPath(conn)" class="connection-path"
+                    :class="{selected: selectedIds.includes(conn.from) || selectedIds.includes(conn.to)}"
+                    @click.stop="onConnectionClick(conn)"/>
+              <circle v-for="port in getConnectionPorts(conn)" :key="port.id"
+                      :cx="port.cx" :cy="port.cy" r="5" fill="#4a90d9"
+                      style="pointer-events:all;cursor:crosshair" />
+            </g>
+          </svg>
+
+          <!-- 组件渲染 -->
+          <div v-for="comp in currentComponents" :key="comp.id"
+               class="canvas-component"
+               :class="['comp-' + comp.type, {selected: selectedIds.includes(comp.id), locked: comp.locked}]"
+               :style="getComponentStyle(comp)"
+               @mousedown.stop="onComponentMouseDown($event, comp)">
+            <!-- 上传中占位 -->
+            <div v-if="comp.data && comp.data.uploading" class="comp-uploading">
+              <div class="progress-bar" :style="{width: (comp.data.progress || 0) + '%'}"></div>
+              <span>{{ comp.data.fileName }} - 上传中...</span>
+            </div>
+            <!-- 图片 -->
+            <img v-else-if="comp.type === 'image'" :src="'/' + comp.data.path" style="width:100%;height:100%;object-fit:cover" />
+            <!-- 视频 -->
+            <video v-else-if="comp.type === 'video'" :src="'/' + comp.data.path" controls style="width:100%;height:100%"></video>
+            <!-- 文本 -->
+            <div v-else-if="comp.type === 'text'" class="comp-text"
+                 :contenteditable="editingTextId === comp.id"
+                 @blur="finishTextEdit(comp)"
+                 @dblclick.stop="startTextEdit(comp)"
+                 :style="getTextStyle(comp.data)"
+                 @input="comp.data.content = $event.target.textContent">
+              {{ comp.data.content || '点击输入文字' }}
+            </div>
+            <!-- 便签 -->
+            <div v-else-if="comp.type === 'note'" class="comp-note"
+                 :style="{background: comp.data.color || '#fff9c4'}">
+              <div class="note-content" v-html="renderMarkdown(comp.data.content)"></div>
+            </div>
+            <!-- Skill便签 -->
+            <div v-else-if="comp.type === 'skill'" class="comp-skill">
+              <strong>{{ comp.data.skillName }}</strong>
+              <p>{{ comp.data.skillDesc }}</p>
+            </div>
+            <!-- 矩形 -->
+            <div v-else-if="comp.type === 'rect'" class="comp-rect"
+                 :style="{background: comp.data.bgColor || '#e3f2fd'}"></div>
+          </div>
+
+          <!-- 矩形绘制预览 -->
+          <div v-if="drawingRect" class="canvas-drawing-rect"
+               :style="{left: Math.min(drawingRect.startX, drawingRect.currentX) + 'px',
+                        top: Math.min(drawingRect.startY, drawingRect.currentY) + 'px',
+                        width: Math.abs(drawingRect.currentX - drawingRect.startX) + 'px',
+                        height: Math.abs(drawingRect.currentY - drawingRect.startY) + 'px'}"></div>
+        </div>
+
+        <!-- 右键菜单 -->
+        <div v-if="contextMenu.visible"
+             class="context-menu"
+             :style="{left: contextMenu.x + 'px', top: contextMenu.y + 'px'}">
+          <template v-for="(item, idx) in contextMenu.items" :key="idx">
+            <div v-if="item.divider" class="context-menu-divider"></div>
+            <div v-else class="context-menu-item"
+                 :class="{disabled: item.disabled}"
+                 @click="item.disabled || item.action()">
+              {{ item.label }}
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- 左下角缩放控制 -->
+      <div class="canvas-zoom-control" id="zoomLevel" @mouseenter="showZoomMenu = true" @mouseleave="showZoomMenu = false">
+        {{ Math.round(zoom * 100) }}%
+        <div v-if="showZoomMenu" class="zoom-menu">
+          <div @click="zoomIn">放大</div>
+          <div @click="zoomOut">缩小</div>
+          <div @click="fitScreen">适合屏幕</div>
+          <div @click="zoomTo(0.5)">50%</div>
+          <div @click="zoomTo(1)">100%</div>
+          <div @click="zoomTo(2)">200%</div>
+        </div>
+      </div>
+
+      <!-- Toast 提示 -->
+      <transition name="fade">
+        <div v-if="toast.visible" class="canvas-toast">{{ toast.message }}</div>
+      </transition>
+    </div>
+  </div>
+
+  <!-- 隐藏的文件上传 input -->
+  <input type="file" id="imageUpload" accept="image/bmp,image/jpeg,image/png,image/webp" style="display:none" @change="handleImageUpload">
+  <input type="file" id="videoUpload" accept="video/mp4,video/webm,video/quicktime,video/x-m4v" style="display:none" @change="handleVideoUpload">
+
+  <script src="/static/canvas-api.js"></script>
+  <script src="/static/canvas.js"></script>
+</body>
+</html>

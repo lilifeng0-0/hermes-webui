@@ -1,0 +1,316 @@
+/* 万能画布样式 */
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #f0f0f0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.canvas-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 工具栏 */
+.canvas-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 100;
+}
+
+.toolbar-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  position: relative;
+  transition: background 0.15s;
+}
+
+.toolbar-btn:hover {
+  background: #f0f0f0;
+}
+
+.toolbar-btn.active {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+/* Skills 下拉 */
+.skills-dropdown {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 200;
+}
+
+.skill-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+}
+
+.skill-item:last-child { border-bottom: none; }
+
+.skill-item:hover { background: #f5f5f5; }
+
+.skill-item strong { font-size: 13px; color: #333; }
+
+.skill-item p { font-size: 11px; color: #888; margin: 4px 0 0; }
+
+/* 画布区域 */
+.canvas-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  background: #f5f5f5;
+  background-image:
+    radial-gradient(circle, #ccc 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.canvas-transform {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+/* SVG连接线层 */
+.connections-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.connection-path {
+  fill: none;
+  stroke: #666;
+  stroke-width: 2;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connection-path:hover {
+  stroke: #4a90d9;
+  stroke-width: 2.5;
+}
+
+.connection-path.selected {
+  stroke: #4a90d9;
+  stroke-width: 2.5;
+}
+
+/* 组件通用 */
+.canvas-component {
+  position: absolute;
+  user-select: none;
+  cursor: move;
+}
+
+.canvas-component.selected {
+  outline: 2px solid #1976d2;
+  outline-offset: 1px;
+}
+
+.canvas-component.locked {
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+/* 图片组件 */
+.comp-image img {
+  display: block;
+}
+
+/* 视频组件 */
+.comp-video video {
+  display: block;
+}
+
+/* 文本组件 */
+.comp-text {
+  padding: 4px 8px;
+  min-width: 50px;
+  min-height: 20px;
+  outline: none;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comp-text[contenteditable="true"] {
+  outline: 2px dashed #1976d2;
+}
+
+/* 便签组件 */
+.comp-note {
+  padding: 10px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  min-width: 100px;
+  min-height: 60px;
+}
+
+.note-content { font-size: 13px; line-height: 1.5; }
+
+/* Skill便签 */
+.comp-skill {
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 6px;
+  padding: 10px;
+  min-width: 120px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.comp-skill strong { font-size: 13px; color: #e65100; }
+
+.comp-skill p { font-size: 11px; color: #888; margin: 4px 0 0; }
+
+/* 矩形组件 */
+.comp-rect {
+  border-radius: 4px;
+  opacity: 0.7;
+}
+
+/* 上传中占位 */
+.comp-uploading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #e3f2fd;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.progress-bar {
+  height: 4px;
+  background: #1976d2;
+  border-radius: 2px;
+  transition: width 0.3s;
+  width: 0%;
+}
+
+/* 矩形绘制预览 */
+.canvas-drawing-rect {
+  position: absolute;
+  border: 2px dashed #1976d2;
+  background: rgba(25,118,210,0.1);
+  pointer-events: none;
+}
+
+/* 右键菜单 */
+.context-menu {
+  position: fixed;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  min-width: 160px;
+  z-index: 1000;
+  padding: 4px 0;
+}
+
+.context-menu-item {
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+}
+
+.context-menu-item:hover { background: #f5f5f5; }
+
+.context-menu-item.disabled { color: #ccc; cursor: not-allowed; }
+
+.context-menu-divider {
+  height: 1px;
+  background: #eee;
+  margin: 4px 0;
+}
+
+/* 缩放控制 */
+.canvas-zoom-control {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  font-size: 12px;
+  color: #666;
+  background: rgba(255,255,255,0.95);
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 100;
+  user-select: none;
+}
+
+.zoom-menu {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+
+.zoom-menu div {
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.zoom-menu div:hover { background: #f0f0f0; }
+
+/* Toast */
+.canvas-toast {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }

@@ -10,7 +10,7 @@ const CanvasAPI = {
     return fetch('/api/canvas/save', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(data)
+      body: JSON.stringify({canvas_id: data.id, ...data})
     }).then(r => r.json());
   },
   new(name) {

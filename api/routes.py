@@ -1272,6 +1272,16 @@ def handle_get(handler, parsed) -> bool:
                 return bad(handler, "Canvas not found", 404)
         return j(handler, {"canvases": list_canvases()})
 
+    # GET /api/canvas/<canvas_id> — load single canvas
+    if parsed.path.startswith("/api/canvas/") and parsed.path.count("/") == 3 and handler.command == "GET":
+        canvas_id = parsed.path[len("/api/canvas/"):]
+        canvas_id = _html.unescape(canvas_id)
+        try:
+            from api.canvas import load_canvas
+            return j(handler, {"canvas": load_canvas(canvas_id)})
+        except KeyError:
+            return bad(handler, "Canvas not found", 404)
+
     return False  # 404
 
 
@@ -1334,6 +1344,20 @@ def handle_put(handler, parsed) -> bool:
         except Exception as e:
             return j(handler, {"error": str(e)}, status=500)
 
+    # PUT /api/canvas/<canvas_id> — save canvas data
+    if parsed.path.startswith("/api/canvas/") and handler.command == "PUT":
+        canvas_id = parsed.path[len("/api/canvas/"):]
+        canvas_id = _html.unescape(canvas_id)
+        try:
+            data = _read_body(handler)
+            from api.canvas import save_canvas
+            canvas = save_canvas(canvas_id, data)
+            return j(handler, {"canvas": canvas})
+        except KeyError:
+            return bad(handler, "Canvas not found", 404)
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
     return False  # 404
 
 
@@ -1374,7 +1398,6 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/transcribe":
         return handle_transcribe(handler)
 
-<<<<<<< Updated upstream
     if parsed.path == "/api/canvas/new":
         from api.canvas import new_canvas
 

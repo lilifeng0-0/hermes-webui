@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>万能画布</title>
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="/static/vue.global.prod.js"></script>
   <link rel="stylesheet" href="/static/canvas.css">
 </head>
 <body>
@@ -12,10 +12,50 @@
     <div class="canvas-container">
       <!-- 工具栏 -->
       <div class="canvas-toolbar" v-if="canvas">
-        <button class="toolbar-btn" :class="{active: tool === 'select'}" @click="setTool('select')" title="选择/移动">
+        <!-- 画布标签页 -->
+        <div class="canvas-tabs">
+          <div v-for="(tab, cid) in canvas.canvases" :key="cid"
+               class="canvas-tab"
+               :class="{active: cid === canvas.activeCanvasId}"
+               @click="switchCanvas(cid)">
+            <span v-if="editingCanvasId !== cid" class="canvas-tab-name"
+                  @dblclick.stop="startRenameCanvas(cid)">{{ tab.name || '未命名' }}</span>
+            <input v-else class="canvas-tab-rename-input" type="text"
+                   v-model="tab.name"
+                   @blur="finishRenameCanvas"
+                   @keyup.enter="finishRenameCanvas"
+                   @click.stop
+                   ref="tabRenameInput" />
+            <span v-if="Object.keys(canvas.canvases).length > 1"
+                  class="canvas-tab-close" @click.stop="deleteCanvas(cid)">×</span>
+          </div>
+          <button class="canvas-tab-add" @click="switchToNewTab" title="新建标签">+</button>
+        </div>
+
+        <div class="toolbar-sep"></div>
+
+        <button class="toolbar-btn" :class="{active: tool === 'select'}"
+                @click="toggleSelectMenu"
+                title="选择">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M5 3l14 9-7 1-4 7z"/>
           </svg>
+          <!-- 选择工具下拉菜单 -->
+          <div v-if="showSelectMenu" class="select-dropdown" @click.stop>
+            <div class="select-dropdown-item" :class="{active: tool === 'select'}" @click="setTool('select')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 3l14 9-7 1-4 7z"/>
+              </svg>
+              选择
+            </div>
+            <div class="select-dropdown-item" :class="{active: isPanning}" @click="togglePan">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v0M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2M10 10V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8"/>
+                <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8H8a8 8 0 0 1-8-8V6"/>
+              </svg>
+              移动画布
+            </div>
+          </div>
         </button>
         <button class="toolbar-btn" @click="triggerImageUpload" title="上传图片">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -35,6 +75,12 @@
             <rect x="3" y="3" width="18" height="18" rx="2"/>
           </svg>
         </button>
+        <button class="toolbar-btn" :class="{active: tool === 'connect'}" @click="setTool('connect')" title="连接线">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+            <path d="M7 12h10"/>
+          </svg>
+        </button>
         <button class="toolbar-btn" :class="{active: tool === 'text'}" @click="setTool('text')" title="文字">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 7V4h16v3"/><path d="M12 4v16"/><path d="M8 20h8"/>
@@ -46,11 +92,21 @@
           </svg>
           <div v-if="showSkillsDropdown" class="skills-dropdown" @click.stop>
             <div v-for="skill in skills" :key="skill.name" class="skill-item"
+                 draggable="true"
+                 @dragstart="onSkillDragStart($event, skill)"
+                 @dragend="onSkillDragEnd"
                  @click="addSkillToCanvas(skill)">
               <strong>{{ skill.name }}</strong>
               <p>{{ skill.description }}</p>
             </div>
           </div>
+        </button>
+        <button class="toolbar-btn" @click="exportCanvas" title="导出画布">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
         </button>
       </div>
 
@@ -63,7 +119,9 @@
            @mousemove="onCanvasMouseMove"
            @mouseup="onCanvasMouseUp"
            @click="onCanvasClick"
-           @contextmenu.prevent="onContextMenu">
+           @contextmenu.prevent="onContextMenu"
+           @dragover.prevent="onCanvasDragOver"
+           @drop="onCanvasDrop">
         <div class="canvas-transform" :style="transformStyle">
           <!-- SVG连接线层 -->
           <svg class="connections-layer" :style="{width: canvasAreaWidth + 'px', height: canvasAreaHeight + 'px', transform: `scale(${zoom})`}">
@@ -78,7 +136,8 @@
             <g v-for="conn in currentConnections" :key="conn.id">
               <path :d="getConnectionPath(conn)" class="connection-path"
                     :class="{selected: selectedIds.includes(conn.from) || selectedIds.includes(conn.to)}"
-                    @click.stop="onConnectionClick(conn)"/>
+                    @click.stop="onConnectionClick(conn)"
+                    @contextmenu.prevent.stop="onConnectionContextMenu($event, conn)" />
               <circle v-for="port in getConnectionPorts(conn)" :key="port.id"
                       :cx="port.cx" :cy="port.cy" r="5" fill="#4a90d9"
                       style="pointer-events:all;cursor:crosshair" />
@@ -90,6 +149,7 @@
                class="canvas-component"
                :class="['comp-' + comp.type, {selected: selectedIds.includes(comp.id), locked: comp.locked}]"
                :style="getComponentStyle(comp)"
+               :data-comp-id="comp.id"
                @mousedown.stop="onComponentMouseDown($event, comp)">
             <!-- 上传中占位 -->
             <div v-if="comp.data && comp.data.uploading" class="comp-uploading">
@@ -122,6 +182,11 @@
             <!-- 矩形 -->
             <div v-else-if="comp.type === 'rect'" class="comp-rect"
                  :style="{background: comp.data.bgColor || '#e3f2fd'}"></div>
+            <!-- 连接端口（4个） -->
+            <div class="comp-port port-top" data-port="top" @mousedown.stop.prevent="onPortMouseDown($event, comp, 'top')"></div>
+            <div class="comp-port port-right" data-port="right" @mousedown.stop.prevent="onPortMouseDown($event, comp, 'right')"></div>
+            <div class="comp-port port-bottom" data-port="bottom" @mousedown.stop.prevent="onPortMouseDown($event, comp, 'bottom')"></div>
+            <div class="comp-port port-left" data-port="left" @mousedown.stop.prevent="onPortMouseDown($event, comp, 'left')"></div>
           </div>
 
           <!-- 矩形绘制预览 -->
@@ -130,6 +195,22 @@
                         top: Math.min(drawingRect.startY, drawingRect.currentY) + 'px',
                         width: Math.abs(drawingRect.currentX - drawingRect.startX) + 'px',
                         height: Math.abs(drawingRect.currentY - drawingRect.startY) + 'px'}"></div>
+
+          <!-- 拖拽连接线预览 -->
+          <svg v-if="draggingConnection" class="temp-connection-layer"
+               :style="{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',overflow:'visible'}">
+            <path :d="getTempConnectionPath()" stroke="#4a90d9" stroke-width="2" fill="none"
+                  stroke-dasharray="5,3" marker-end="url(#arrowhead)" />
+          </svg>
+
+          <!-- 框选预览（使用 canvas 坐标，在 canvas-transform 内定位） -->
+          <div v-if="marquee" class="canvas-marquee"
+               :style="{
+                 left: Math.min(marquee.startX, marquee.canvasX) + 'px',
+                 top: Math.min(marquee.startY, marquee.canvasY) + 'px',
+                 width: Math.abs(marquee.canvasX - marquee.startX) + 'px',
+                 height: Math.abs(marquee.canvasY - marquee.startY) + 'px'
+               }"></div>
         </div>
 
         <!-- 右键菜单 -->
@@ -148,9 +229,11 @@
       </div>
 
       <!-- 左下角缩放控制 -->
-      <div class="canvas-zoom-control" id="zoomLevel" @mouseenter="showZoomMenu = true" @mouseleave="showZoomMenu = false">
+      <div class="canvas-zoom-control" id="zoomLevel"
+           @mouseenter="showZoomMenu = true"
+           @mouseleave="scheduleHideZoomMenu">
         {{ Math.round(zoom * 100) }}%
-        <div v-if="showZoomMenu" class="zoom-menu">
+        <div v-if="showZoomMenu" class="zoom-menu" @mouseenter="cancelHideZoomMenu" @click.stop>
           <div @click="zoomIn">放大</div>
           <div @click="zoomOut">缩小</div>
           <div @click="fitScreen">适合屏幕</div>
@@ -159,17 +242,16 @@
           <div @click="zoomTo(2)">200%</div>
         </div>
       </div>
-
       <!-- Toast 提示 -->
       <transition name="fade">
         <div v-if="toast.visible" class="canvas-toast">{{ toast.message }}</div>
       </transition>
+
+      <!-- 隐藏的文件上传 input（必须放在 #app 内才能被 Vue 的 @change 绑定） -->
+      <input type="file" id="imageUpload" accept="image/bmp,image/jpeg,image/png,image/webp" style="display:none" @change="handleImageUpload">
+      <input type="file" id="videoUpload" accept="video/mp4,video/webm,video/quicktime,video/x-m4v" style="display:none" @change="handleVideoUpload">
     </div>
   </div>
-
-  <!-- 隐藏的文件上传 input -->
-  <input type="file" id="imageUpload" accept="image/bmp,image/jpeg,image/png,image/webp" style="display:none" @change="handleImageUpload">
-  <input type="file" id="videoUpload" accept="video/mp4,video/webm,video/quicktime,video/x-m4v" style="display:none" @change="handleVideoUpload">
 
   <script src="/static/canvas-api.js"></script>
   <script src="/static/canvas.js"></script>

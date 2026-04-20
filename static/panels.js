@@ -20,6 +20,55 @@ async function switchPanel(name) {
   if (name === 'usage') await loadUsagePanel();
 }
 
+// ── Canvas panel ──
+let _canvasIframe = null;
+async function loadCanvas() {
+  const panel = document.getElementById('panelCanvas');
+  if (!panel) return;
+  // If already loaded, do nothing
+  if (_canvasIframe) return;
+  // Create iframe to load canvas
+  const iframe = document.createElement('iframe');
+  iframe.id = 'canvasIframe';
+  iframe.src = '/static/canvas.html';
+  iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;';
+  iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
+  panel.innerHTML = '';
+  panel.appendChild(iframe);
+  _canvasIframe = iframe;
+  // Listen for messages from canvas iframe
+  window.addEventListener('message', handleCanvasMessage);
+}
+
+function handleCanvasMessage(event) {
+  // Handle canvas -> parent communication
+  const data = event.data;
+  if (!data || !data.type) return;
+  if (data.type === 'canvas-send-to-chat') {
+    // Inject text into chat input and trigger send
+    const msgEl = document.getElementById('msg');
+    if (msgEl && data.text) {
+      msgEl.value = data.text;
+      msgEl.focus();
+    }
+    // Handle file attachments if any
+    if (data.files && data.files.length > 0 && typeof S !== 'undefined' && S.pendingFiles) {
+      // Files are referenced by path; add them to pending files for the next send
+      data.files.forEach(f => { if (f) S.pendingFiles.push(f); });
+      renderTray();
+    }
+    // Trigger send after a tick (allow UI to update first)
+    setTimeout(() => { if (typeof send === 'function') send(); }, 10);
+  } else if (data.type === 'canvas-action') {
+    // Canvas sends action result back to chat as a message
+    if (typeof send === 'function' && data.text) {
+      const msgEl = document.getElementById('msg');
+      if (msgEl) msgEl.value = data.text;
+      setTimeout(() => send(), 10);
+    }
+  }
+}
+
 // ── Cron panel ──
 async function loadCrons() {
   const box = $('cronList');

@@ -22,12 +22,15 @@
         tool: 'select',
         selectedIds: [],
         editingTextId: null,
+        editingCanvasId: null,
         isPanning: false,
         panStart: { x: 0, y: 0 },
         panStartXY: { x: 0, y: 0 },
         drawingRect: null,
+        marquee: null, // 框选
         componentStartPos: null,
         showZoomMenu: false,
+        showSelectMenu: false,
         showSkillsDropdown: false,
         skills: [],
         clipboard: null,
@@ -35,6 +38,7 @@
         redoStack: [],
         maxUndoSteps: 50,
         contextMenu: { visible: false, x: 0, y: 0, items: [] },
+        draggingConnection: null, // {from, fromPort, currentX, currentY}
         toast: { visible: false, message: '' },
         saveTimer: null,
         toasts: [],
@@ -55,22 +59,46 @@
         return tab ? tab.connections : [];
       },
       transformStyle() {
+        // 正确公式: screen = zoom * (canvas + pan)
+        // 逆变换: canvas = (screen - screenOffset) / zoom - pan
+        // CSS: translate(-pan*zoom, -pan*zoom) scale(zoom)
         return {
-          transform: `scale(${this.zoom}) translate(${this.panX}px, ${this.panY}px)`,
+          transform: `translate(${-this.panX * this.zoom}px, ${-this.panY * this.zoom}px) scale(${this.zoom})`,
         };
       },
     },
 
     async mounted() {
       // 暴露全局方法
+      // Expose to parent window (iframe context)
       window.CANVAS_GET_COMPONENT = (id) => {
         return this.currentComponents.find(c => c.id === id);
       };
       window.CANVAS_EXECUTE_ACTION = (actionStr) => this.executeCanvasAction(actionStr);
+      if (window.parent && window.parent !== window) {
+        window.parent.CANVAS_GET_COMPONENT = window.CANVAS_GET_COMPONENT;
+        window.parent.CANVAS_EXECUTE_ACTION = window.CANVAS_EXECUTE_ACTION;
+      }
       this.$watch('selectedIds', (ids) => {
         window.CANVAS_ACTIVE = ids.length > 0;
         window.CANVAS_SELECTED = ids;
       });
+
+      // ── Auto-save: deep watch on canvas data ────────────────────────────
+      this.$watch(() => this.canvas, () => {
+        if (!this.canvas) return;
+        this.scheduleAutoSave();
+      }, { deep: true });
+
+      // 注册 beforeunmount (unmount时强制保存)
+      this._beforeUnloadHandler = () => {
+        if (this.saveTimer) clearTimeout(this.saveTimer);
+        if (this.canvas) {
+          const data = JSON.stringify(this.canvas);
+          navigator.sendBeacon && navigator.sendBeacon('/api/canvas/save', data);
+        }
+      };
+      window.addEventListener('beforeunload', this._beforeUnloadHandler);
 
       // 加载画布
       await this.loadCanvas();
@@ -88,7 +116,10 @@
       window.removeEventListener('keydown', this.onKeyDown);
       window.removeEventListener('keyup', this.onKeyUp);
       document.removeEventListener('click', this.hideContextMenu);
+      window.removeEventListener('beforeunload', this._beforeUnloadHandler);
       if (this.saveTimer) clearTimeout(this.saveTimer);
+      // Force sync save on unmount
+      if (this.canvas) this.saveCanvas();
     },
 
     methods: {
@@ -142,7 +173,112 @@
       // ── 工具 ─────────────────────────────────────────────────────
       setTool(t) {
         this.tool = t;
+        this.isPanning = false; // 切换工具时退出移动画布模式
+        this.marquee = null;
+        this.drawingRect = null;
+        document.body.style.cursor = 'default';
+        this.showSelectMenu = false;
         this.showSkillsDropdown = false;
+      },
+      toggleSelectMenu() {
+        this.showSelectMenu = !this.showSelectMenu;
+        this.showSkillsDropdown = false;
+      },
+      togglePan() {
+        this.isPanning = !this.isPanning;
+        if (this.isPanning) {
+          this.tool = 'select'; // 进入移动模式
+        } else {
+          this.tool = 'select'; // 退出移动模式
+        }
+        document.body.style.cursor = this.isPanning ? 'grab' : 'default';
+        this.showSelectMenu = false;
+      },
+
+      // ── 多画布管理 ────────────────────────────────────────────────
+      switchCanvas(cid) {
+        if (!this.canvas || !this.canvas.canvases[cid]) return;
+        // 保存当前画布缩放/位置
+        const current = this.canvas.canvases[this.canvas.activeCanvasId];
+        if (current) {
+          current.zoom = this.zoom;
+          current.panX = this.panX;
+          current.panY = this.panY;
+        }
+        this.canvas.activeCanvasId = cid;
+        // 恢复目标画布的缩放/位置
+        const target = this.canvas.canvases[cid];
+        this.zoom = target.zoom || 1.0;
+        this.panX = target.panX || 0;
+        this.panY = target.panY || 0;
+        this.selectedIds = [];
+        this.tool = 'select';
+        this.scheduleAutoSave();
+      },
+
+      switchToNewTab() {
+        // 添加新标签页到当前画布文件（不调用后端）
+        if (!this.canvas) return;
+        this.pushUndo();
+        const tabId = 'tab-' + Date.now();
+        const tabName = '新标签 ' + Object.keys(this.canvas.canvases).length;
+        this.canvas.canvases[tabId] = {
+          name: tabName,
+          zoom: 1.0,
+          panX: 0,
+          panY: 0,
+          components: [],
+          connections: [],
+        };
+        this.canvas.activeCanvasId = tabId;
+        this.zoom = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.selectedIds = [];
+        this.tool = 'select';
+        this.scheduleAutoSave();
+        this.showToast('新标签已创建');
+      },
+
+      async deleteCanvas(cid) {
+        if (Object.keys(this.canvas.canvases).length <= 1) {
+          this.showToast('至少保留一个画布'); return;
+        }
+        if (!confirm('确定删除该画布？')) return;
+        this.pushUndo();
+        const wasActive = this.canvas.activeCanvasId === cid;
+        delete this.canvas.canvases[cid];
+        if (wasActive) {
+          const nextId = Object.keys(this.canvas.canvases)[0];
+          this.switchCanvas(nextId);
+        }
+        this.scheduleAutoSave();
+        this.showToast('画布已删除');
+      },
+
+      startRenameCanvas(cid) {
+        this.editingCanvasId = cid;
+        this.$nextTick(() => {
+          const input = this.$el.querySelector('.canvas-tab-rename-input');
+          if (input) { input.focus(); input.select(); }
+        });
+      },
+
+      finishRenameCanvas() {
+        this.editingCanvasId = null;
+        this.scheduleAutoSave();
+      },
+
+      // ── 导出 ─────────────────────────────────────────────────────
+      exportCanvas() {
+        const data = JSON.stringify(this.canvas, null, 2);
+        const blob = new Blob([data], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (this.canvas.name || 'canvas') + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
       },
 
       // ── 缩放 ────────────────────────────────────────────────────
@@ -155,9 +291,45 @@
         this.panY = 0;
         this.showZoomMenu = false;
       },
+      _zoomHideTimer: null,
+      scheduleHideZoomMenu() {
+        this._zoomHideTimer = setTimeout(() => { this.showZoomMenu = false; }, 200);
+      },
+      cancelHideZoomMenu() {
+        if (this._zoomHideTimer) { clearTimeout(this._zoomHideTimer); this._zoomHideTimer = null; }
+      },
+
+      // 全局鼠标事件（平移画布时使用，避免鼠标移出区域后事件中断）
+      _onDocMouseMove(e) {
+        if (!this.isPanning) return;
+        this.panX = this.panStart.x - (e.clientX - this.panStartXY.x) / this.zoom;
+        this.panY = this.panStart.y - (e.clientY - this.panStartXY.y) / this.zoom;
+      },
+      _onDocMouseUp(e) {
+        if (!this.isPanning) return;
+        this.isPanning = false;
+        document.body.style.cursor = 'default';
+        document.removeEventListener('mousemove', this._onDocMouseMove);
+        document.removeEventListener('mouseup', this._onDocMouseUp);
+      },
+
       onWheel(e) {
-        if (e.deltaY < 0) this.zoomIn();
-        else this.zoomOut();
+        if (this.isPanning) return;
+        const area = document.getElementById('canvasArea').getBoundingClientRect();
+        // 鼠标在 canvas 区域内的位置（相对于 canvas 左上角）
+        const mx = e.clientX - area.left;
+        const my = e.clientY - area.top;
+        const oldZoom = this.zoom;
+        if (e.deltaY < 0) this.zoom = Math.min(5.0, this.zoom + 0.05);
+        else this.zoom = Math.max(0.1, this.zoom - 0.05);
+        const newZoom = this.zoom;
+        if (newZoom !== oldZoom) {
+          // 以鼠标位置为中心缩放：调整 pan 使鼠标下的 canvas 坐标保持不变
+          const canvasX = mx / oldZoom + this.panX;
+          const canvasY = my / oldZoom + this.panY;
+          this.panX = canvasX - mx / newZoom;
+          this.panY = canvasY - my / newZoom;
+        }
       },
 
       // ── 键盘事件 ─────────────────────────────────────────────────
@@ -165,6 +337,9 @@
         if (e.target.contentEditable === 'true' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         if (e.code === 'Space' && !this.isPanning) {
           this.isPanning = true;
+          // 空格开始平移时，记录当前鼠标位置和当前 pan 值作为起点
+          this.panStartXY = { x: e.clientX, y: e.clientY };
+          this.panStart = { x: this.panX, y: this.panY };
           document.body.style.cursor = 'grab';
           e.preventDefault();
         }
@@ -187,41 +362,51 @@
         if (e.code === 'Space') {
           this.isPanning = false;
           document.body.style.cursor = 'default';
+          document.removeEventListener('mousemove', this._onDocMouseMove);
+          document.removeEventListener('mouseup', this._onDocMouseUp);
         }
       },
 
       // ── 画布鼠标事件 ──────────────────────────────────────────────
       onCanvasMouseDown(e) {
-        if (e.target.id !== 'canvasArea' && !e.target.classList.contains('canvas-transform')) return;
+        const areaEl = e.target.closest('#canvasArea, .canvas-transform, .connections-layer');
+        if (!areaEl) return;
+        const area = document.getElementById('canvasArea').getBoundingClientRect();
         if (this.isPanning) {
           this.panStartXY = { x: e.clientX, y: e.clientY };
           this.panStart = { x: this.panX, y: this.panY };
           document.body.style.cursor = 'grabbing';
+          // 全局监听，避免鼠标移出 canvas 区域后事件中断
+          document.addEventListener('mousemove', this._onDocMouseMove);
+          document.addEventListener('mouseup', this._onDocMouseUp);
         } else if (this.tool === 'rect') {
-          const area = document.getElementById('canvasArea').getBoundingClientRect();
-          const x = (e.clientX - area.left) / this.zoom;
-          const y = (e.clientY - area.top) / this.zoom;
+          const x = (e.clientX - area.left) / this.zoom + this.panX;
+          const y = (e.clientY - area.top) / this.zoom + this.panY;
           this.drawingRect = { startX: x, startY: y, currentX: x, currentY: y };
         } else if (this.tool === 'text') {
           // 文本工具由 onCanvasClick 处理
         } else if (this.tool === 'select') {
-          this.selectedIds = [];
+          const cx = (e.clientX - area.left) / this.zoom + this.panX;
+          const cy = (e.clientY - area.top) / this.zoom + this.panY;
+          this.marquee = { startX: cx, startY: cy, canvasX: cx, canvasY: cy };
+          this.showSelectMenu = false;
         }
       },
       onCanvasMouseMove(e) {
-        if (this.isPanning) {
-          this.panX = this.panStart.x + (e.clientX - this.panStartXY.x) / this.zoom;
-          this.panY = this.panStart.y + (e.clientY - this.panStartXY.y) / this.zoom;
-        } else if (this.drawingRect) {
-          const area = document.getElementById('canvasArea').getBoundingClientRect();
-          this.drawingRect.currentX = (e.clientX - area.left) / this.zoom;
-          this.drawingRect.currentY = (e.clientY - area.top) / this.zoom;
+        if (this.isPanning) return; // panning 由 _onDocMouseMove 处理
+        const area = document.getElementById('canvasArea').getBoundingClientRect();
+        if (this.drawingRect) {
+          const rx = (e.clientX - area.left) / this.zoom + this.panX;
+          const ry = (e.clientY - area.top) / this.zoom + this.panY;
+          this.drawingRect = {...this.drawingRect, currentX: rx, currentY: ry};
+        } else if (this.marquee) {
+          const cx = (e.clientX - area.left) / this.zoom + this.panX;
+          const cy = (e.clientY - area.top) / this.zoom + this.panY;
+          this.marquee = {...this.marquee, canvasX: cx, canvasY: cy};
         }
       },
       onCanvasMouseUp(e) {
-        if (this.isPanning) {
-          document.body.style.cursor = 'grab';
-        } else if (this.drawingRect) {
+        if (this.drawingRect) {
           const { startX, startY, currentX, currentY } = this.drawingRect;
           const x = Math.min(startX, currentX);
           const y = Math.min(startY, currentY);
@@ -233,16 +418,35 @@
           }
           this.drawingRect = null;
           this.tool = 'select';
+        } else if (this.marquee) {
+          // 完成框选：marquee 存储的已经是 canvas 坐标，直接用于选区计算
+          const m = this.marquee;
+          const x1 = Math.min(m.startX, m.canvasX);
+          const y1 = Math.min(m.startY, m.canvasY);
+          const x2 = Math.max(m.startX, m.canvasX);
+          const y2 = Math.max(m.startY, m.canvasY);
+          // 选中被框住的组件
+          const selected = this.currentComponents.filter(c => {
+            return c.x < x2 && c.x + c.width > x1 && c.y < y2 && c.y + c.height > y1;
+          }).map(c => c.id);
+          if (selected.length > 0) {
+            this.selectedIds = selected;
+          }
+          this.marquee = null;
         }
       },
       onCanvasClick(e) {
         if (e.target.id === 'canvasArea' || e.target.classList.contains('canvas-transform')) {
           if (this.tool === 'text') {
             const area = document.getElementById('canvasArea').getBoundingClientRect();
-            const x = (e.clientX - area.left) / this.zoom;
-            const y = (e.clientY - area.top) / this.zoom;
+            const x = (e.clientX - area.left) / this.zoom + this.panX;
+            const y = (e.clientY - area.top) / this.zoom + this.panY;
             this.createTextComponent(x, y);
+          } else if (this.tool === 'select' && !this._componentJustSelected) {
+            // 点击空白处取消选中（组件会通过 onComponentMouseDown 处理，不走这里）
+            this.selectedIds = [];
           }
+          this._componentJustSelected = false;
         }
       },
 
@@ -250,6 +454,7 @@
       onComponentMouseDown(e, comp) {
         if (this.isPanning) return;
         e.stopPropagation();
+        this._componentJustSelected = true; // 防止 onCanvasClick 误清除
 
         if (!this.selectedIds.includes(comp.id)) {
           if (!e.shiftKey) this.selectedIds = [comp.id];
@@ -585,11 +790,18 @@
       async loadSkillsList() {
         try {
           const resp = await fetch('/api/skills/list');
+          if (!resp.ok) throw new Error('API not available');
           const data = await resp.json();
           this.skills = data.skills || [];
         } catch(e) {
-          // 离线
-          this.skills = [];
+          // 尝试 /api/skills 备用
+          try {
+            const resp2 = await fetch('/api/skills');
+            const data2 = await resp2.json();
+            this.skills = data2.skills || [];
+          } catch(e2) {
+            this.skills = [];
+          }
         }
       },
       addSkillToCanvas(skill) {
@@ -607,7 +819,10 @@
 
       // ── 上传图片/视频 ─────────────────────────────────────────────
       triggerImageUpload() {
-        document.getElementById('imageUpload').click();
+        console.log('[Canvas] triggerImageUpload called');
+        const input = document.getElementById('imageUpload');
+        console.log('[Canvas] imageUpload input element:', input);
+        input.click();
       },
       triggerVideoUpload() {
         document.getElementById('videoUpload').click();
@@ -615,22 +830,29 @@
       async handleImageUpload(e) {
         const file = e.target.files[0];
         if (!file) return;
+        console.log('[Canvas] handleImageUpload called, file:', file.name);
         const cid = this.canvas.id;
+        console.log('[Canvas] canvas id:', cid);
         const comp = this.addComponent({
           type: 'image',
           x: 100, y: 100,
           width: 200, height: 150,
           data: { uploading: true, progress: 0, fileName: file.name }
         });
+        console.log('[Canvas] created component:', comp.id);
         try {
+          console.log('[Canvas] uploading...');
           const result = await CanvasAPI.upload(cid, comp.id, file);
+          console.log('[Canvas] upload result:', result);
+          if (result.error) throw new Error(result.error);
           comp.data = { path: result.path, width: result.width, height: result.height, flipH: false, flipV: false };
           comp.width = Math.min(result.width || 200, 400);
           comp.height = Math.min(result.height || 150, 300);
           this.showToast('图片上传完成');
           this.scheduleAutoSave();
         } catch(err) {
-          comp.data.error = err.message;
+          console.error('[Canvas] upload failed:', err);
+          comp.data = { error: err.message };
           this.showToast('上传失败: ' + err.message);
         }
         e.target.value = '';
@@ -766,6 +988,162 @@
         if (!this.selectedIds.includes(conn.from)) {
           this.selectedIds = [conn.from, conn.to];
         }
+        this._rightClickedConn = conn;
+      },
+
+      onConnectionContextMenu(e, conn) {
+        e.preventDefault();
+        this._rightClickedConn = conn;
+        this.contextMenu = {
+          visible: true,
+          x: e.clientX,
+          y: e.clientY,
+          items: [
+            { label: '删除连接', action: () => this.deleteConnection(conn.id) },
+          ],
+        };
+      },
+
+      deleteConnection(connId) {
+        this.pushUndo();
+        const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+        if (!tab) return;
+        tab.connections = tab.connections.filter(c => c.id !== connId);
+        this.scheduleAutoSave();
+        this.showToast('连接已删除');
+      },
+
+      // ── 连接线拖拽创建 ──────────────────────────────────────────────
+      onPortMouseDown(e, comp, port) {
+        if (this.tool !== 'connect' && e.button !== 0) return;
+        e.stopPropagation();
+        const area = document.getElementById('canvasArea').getBoundingClientRect();
+        const startX = (e.clientX - area.left) / this.zoom + this.panX;
+        const startY = (e.clientY - area.top) / this.zoom + this.panY;
+        this.draggingConnection = {
+          from: comp.id,
+          fromPort: port,
+          currentX: startX,
+          currentY: startY,
+        };
+
+        const onMove = (ev) => {
+          if (!this.draggingConnection) return;
+          const mx = (ev.clientX - area.left) / this.zoom + this.panX;
+          const my = (ev.clientY - area.top) / this.zoom + this.panY;
+          this.draggingConnection.currentX = mx;
+          this.draggingConnection.currentY = my;
+        };
+
+        const onUp = (ev) => {
+          if (!this.draggingConnection) return;
+          const el = document.elementFromPoint(ev.clientX, ev.clientY);
+          const portEl = el ? el.closest('.comp-port') : null;
+          if (portEl) {
+            const targetCompEl = portEl.closest('.canvas-component');
+            if (targetCompEl) {
+              const cid = targetCompEl.getAttribute('data-comp-id');
+              if (cid && cid !== this.draggingConnection.from) {
+                this.pushUndo();
+                const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+                if (!tab.connections) tab.connections = [];
+                const exists = tab.connections.some(
+                  c => c.from === this.draggingConnection.from && c.to === cid
+                );
+                if (!exists) {
+                  tab.connections.push({
+                    id: 'conn-' + Date.now(),
+                    from: this.draggingConnection.from,
+                    to: cid,
+                    fromPort: this.draggingConnection.fromPort,
+                    toPort: portEl.getAttribute('data-port'),
+                  });
+                  this.scheduleAutoSave();
+                  this.showToast('连接已创建');
+                }
+              }
+            }
+          }
+          this.draggingConnection = null;
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      },
+
+      getTempConnectionPath() {
+        if (!this.draggingConnection) return '';
+        const fromComp = this.currentComponents.find(c => c.id === this.draggingConnection.from);
+        if (!fromComp) return '';
+        const fromPos = this.getPortPosition(fromComp, this.draggingConnection.fromPort);
+        const { currentX, currentY } = this.draggingConnection;
+        const dx = currentX - fromPos.x;
+        const dy = currentY - fromPos.y;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        let cp1x, cp1y, cp2x, cp2y;
+        const offset = Math.max(30, Math.max(absDx, absDy) * 0.4);
+        if (absDx >= absDy) {
+          cp1x = fromPos.x + (dx > 0 ? offset : -offset);
+          cp1y = fromPos.y;
+          cp2x = currentX + (dx > 0 ? -offset : offset);
+          cp2y = currentY;
+        } else {
+          cp1x = fromPos.x;
+          cp1y = fromPos.y + (dy > 0 ? offset : -offset);
+          cp2x = currentX;
+          cp2y = currentY + (dy > 0 ? -offset : offset);
+        }
+        return `M ${fromPos.x} ${fromPos.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${currentX} ${currentY}`;
+      },
+
+      // ── Skill 拖拽 ─────────────────────────────────────────────────
+      onSkillDragStart(e, skill) {
+        e.dataTransfer.setData('skill', JSON.stringify(skill));
+        e.dataTransfer.effectAllowed = 'copy';
+        this._draggingSkill = skill;
+      },
+
+      onSkillDragEnd() {
+        this._draggingSkill = null;
+      },
+
+      onCanvasDragOver(e) {
+        if (this._draggingSkill) {
+          e.dataTransfer.dropEffect = 'copy';
+        }
+      },
+
+      onCanvasDrop(e) {
+        const skillData = e.dataTransfer.getData('skill');
+        if (!skillData) return;
+        try {
+          const skill = JSON.parse(skillData);
+          const area = document.getElementById('canvasArea').getBoundingClientRect();
+          const x = (e.clientX - area.left) / this.zoom + this.panX;
+          const y = (e.clientY - area.top) / this.zoom + this.panY;
+          this.pushUndo();
+          const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+          const comp = {
+            id: 'comp-' + Date.now(),
+            type: 'skill',
+            x: x - 80,
+            y: y - 30,
+            width: 160,
+            height: 60,
+            locked: false,
+            data: { skillName: skill.name, skillDesc: skill.description },
+          };
+          tab.components.push(comp);
+          this.selectedIds = [comp.id];
+          this.scheduleAutoSave();
+          this.showToast('Skill 已添加到画布');
+        } catch(err) {
+          console.error('Failed to add skill:', err);
+        }
+        this._draggingSkill = null;
       },
 
       // ── Hermes 交互 ──────────────────────────────────────────────
@@ -773,7 +1151,19 @@
         let text = '';
         let files = [];
         if (comp.type === 'image' || comp.type === 'video') {
-          text = `【画布发来的${comp.type === 'image' ? '图片' : '视频'}】`;
+          try {
+            // 先将文件上传为聊天附件
+            const fileResp = await fetch('/' + comp.data.path);
+            const blob = await fileResp.blob();
+            const fd = new FormData();
+            fd.append('file', blob, comp.data.path.split('/').pop());
+            const uploadResp = await fetch('/api/upload', { method: 'POST', body: fd });
+            const uploadData = await uploadResp.json();
+            if (uploadData.filename) files = [uploadData.filename];
+            text = `【画布发来的${comp.type === 'image' ? '图片' : '视频'}】`;
+          } catch(e) {
+            text = `【画布发来的${comp.type === 'image' ? '图片' : '视频'}】(${comp.data.path})`;
+          }
         } else if (comp.type === 'text' || comp.type === 'note') {
           text = `【画布发来的内容】\n\n${comp.data.content}`;
         } else if (comp.type === 'skill') {

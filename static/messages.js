@@ -32,6 +32,16 @@ async function send(){
   let msgText=text;
   if(uploaded.length&&!msgText)msgText=`I've uploaded ${uploaded.length} file(s): ${uploaded.join(', ')}`;
   else if(uploaded.length)msgText=`${text}\n\n[Attached files: ${uploaded.join(', ')}]`;
+  // ── Canvas context injection ─────────────────────────────────────────────
+  if(window.CANVAS_ACTIVE && window.CANVAS_SELECTED && window.CANVAS_SELECTED.length > 0){
+    const ctx=window.CANVAS_SELECTED.map(id=>{
+      const comp=window.CANVAS_GET_COMPONENT?window.CANVAS_GET_COMPONENT(id):null;
+      if(!comp)return null;
+      const typeLabel={image:'图片',video:'视频',text:'文本',note:'便签',skill:'Skill',rect:'矩形'}[comp.type]||comp.type;
+      return `- id: ${id}, 类型: ${typeLabel}, 内容: ${comp.data&&(comp.data.path||comp.data.content)?(comp.data.path||comp.data.content):'(无)'}`;
+    }).filter(Boolean).join('\n');
+    msgText=`【画布上下文】\n选中的组件：\n${ctx}\n\n请根据用户指令操作画布。如果需要执行布局调整或组件操作，请在回复末尾用以下格式声明：\n[CANVAS_ACTION] <操作类型>: <参数> [/CANVAS_ACTION]\n\n用户指令：${msgText}`;
+  }
   if(!msgText){setComposerStatus('Nothing to send');return;}
 
   $('msg').value='';autoResize();
@@ -478,6 +488,14 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       setComposerStatus('');
       playNotificationSound();
       sendBrowserNotification('Response complete',assistantText?assistantText.slice(0,100):'Task finished');
+      // ── Canvas action parsing ─────────────────────────────────────────────
+      if(window.CANVAS_EXECUTE_ACTION && assistantText){
+        const _caRegex=/\[CANVAS_ACTION\]([\s\S]*?)\[\/CANVAS_ACTION\]/g;
+        let _caMatch;
+        while((_caMatch=_caRegex.exec(assistantText))!==null){
+          window.CANVAS_EXECUTE_ACTION(_caMatch[1].trim());
+        }
+      }
     });
 
     source.addEventListener('stream_end',e=>{

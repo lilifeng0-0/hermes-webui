@@ -747,15 +747,19 @@ function applyBotName(){
 }
 
 // ── Canvas → Chat 消息监听 ─────────────────────────────────────────
+// (Now handled by panels.js handleCanvasMessage; this is kept for backwards compatibility)
 window.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'canvas-send-to-chat') {
     const msgEl = document.getElementById('msg');
     if (msgEl && e.data.text) {
       msgEl.value = e.data.text;
+      msgEl.focus();
     }
-    if (typeof send === 'function') {
-      send();
+    if (e.data.files && e.data.files.length > 0 && typeof S !== 'undefined' && S.pendingFiles) {
+      e.data.files.forEach(f => { if (f) S.pendingFiles.push(f); });
+      renderTray();
     }
+    setTimeout(() => { if (typeof send === 'function') send(); }, 10);
   }
 });
 

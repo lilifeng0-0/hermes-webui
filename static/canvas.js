@@ -63,6 +63,15 @@
       },
       floatingToolbarScreen() {
         if (!this.floatingToolbar.visible) return null;
+        // 优先使用组件位置（始终显示在组件上方居中）
+        if (this.selectedIds.length === 1) {
+          const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+          if (comp) {
+            const screenX = this.panX + this.zoom * comp.x;
+            const screenY = this.panY + this.zoom * comp.y;
+            return { left: screenX - 90, top: screenY - 36 };
+          }
+        }
         return {
           left: this.floatingToolbar.mouseDownX - 90,
           top: this.floatingToolbar.mouseDownY - 30
@@ -191,12 +200,14 @@
       // 注册键盘事件
       window.addEventListener('keydown', this.onKeyDown);
       window.addEventListener('keyup', this.onKeyUp);
+      window.addEventListener('mouseup', this.onWindowMouseUp);
       document.addEventListener('click', this.hideContextMenu);
     },
 
     beforeUnmount() {
       window.removeEventListener('keydown', this.onKeyDown);
       window.removeEventListener('keyup', this.onKeyUp);
+      window.removeEventListener('mouseup', this.onWindowMouseUp);
       document.removeEventListener('click', this.hideContextMenu);
       window.removeEventListener('beforeunload', this._beforeUnloadHandler);
       if (this.saveTimer) clearTimeout(this.saveTimer);
@@ -594,11 +605,24 @@
         const dx = Math.abs(e.clientX - this.floatingToolbar.mouseDownX);
         const dy = Math.abs(e.clientY - this.floatingToolbar.mouseDownY);
         if (dx < 3 && dy < 3) {
+          // 隐藏工具栏（不在这里重置标志，等 window mouseup 再重置）
           this.floatingToolbar.visible = false;
         }
-        // 重置标志，防止影响后续点击空白处的选区清除
+      },
+      onWindowMouseUp(e) {
+        // 始终重置标志（确保点击空白处能取消选中）
         this._componentJustSelected = false;
         this._marqueeJustPerformed = false;
+        // 如果工具栏可见且鼠标在工具栏外松开，隐藏工具栏
+        if (this.floatingToolbar.visible) {
+          const toolbar = document.querySelector('.floating-toolbar');
+          if (toolbar) {
+            const tr = toolbar.getBoundingClientRect();
+            if (e.clientX < tr.left || e.clientX > tr.right || e.clientY < tr.top || e.clientY > tr.bottom) {
+              this.floatingToolbar.visible = false;
+            }
+          }
+        }
       },
       syncTmpRectRadius() {
         if (this.selectedIds.length !== 1) return;

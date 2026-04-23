@@ -680,14 +680,32 @@
       },
 
       // ── 连接线渲染 ─────────────────────────────────────────────────
+      // 计算两个组件之间最近的一对连接点
+      _getBestPorts(fromComp, toComp) {
+        const ports = ['top', 'right', 'bottom', 'left'];
+        let bestPair = { from: 'right', to: 'left', dist: Infinity };
+        for (const fp of ports) {
+          for (const tp of ports) {
+            const fpPos = this.getPortPosition(fromComp, fp);
+            const tpPos = this.getPortPosition(toComp, tp);
+            const dist = Math.hypot(tpPos.x - fpPos.x, tpPos.y - fpPos.y);
+            if (dist < bestPair.dist) {
+              bestPair = { from: fp, to: tp, dist };
+            }
+          }
+        }
+        return bestPair;
+      },
+
       getConnectionPath(conn) {
         const fromComp = this.currentComponents.find(c => c.id === conn.from);
         const toComp = this.currentComponents.find(c => c.id === conn.to);
         if (!fromComp || !toComp || !fromComp.width || !fromComp.height || !toComp.width || !toComp.height) return '';
 
-        // 计算端口位置（默认从组件中心到中心）
-        const fromPort = conn.fromPort || 'right';
-        const toPort = conn.toPort || 'left';
+        // 自动选择最近的一对连接点（除非连接已指定端口）
+        const bestPorts = this._getBestPorts(fromComp, toComp);
+        const fromPort = conn.fromPort || bestPorts.from;
+        const toPort = conn.toPort || bestPorts.to;
 
         // 获取连接点坐标
         const fromPos = this.getPortPosition(fromComp, fromPort);
@@ -751,8 +769,9 @@
         const fromComp = this.currentComponents.find(c => c.id === conn.from);
         const toComp = this.currentComponents.find(c => c.id === conn.to);
         if (!fromComp || !toComp || !fromComp.width || !fromComp.height || !toComp.width || !toComp.height) return [];
-        const fromPort = conn.fromPort || 'right';
-        const toPort = conn.toPort || 'left';
+        const bestPorts = this._getBestPorts(fromComp, toComp);
+        const fromPort = conn.fromPort || bestPorts.from;
+        const toPort = conn.toPort || bestPorts.to;
         const fromPos = this.getPortPosition(fromComp, fromPort);
         const toPos = this.getPortPosition(toComp, toPort);
         return [

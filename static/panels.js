@@ -30,7 +30,7 @@ async function loadCanvas() {
   // Create iframe to load canvas
   const iframe = document.createElement('iframe');
   iframe.id = 'canvasIframe';
-  iframe.src = '/static/canvas.html';
+  iframe.src = '/static/canvas.html?v=13';
   iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;';
   iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
   panel.innerHTML = '';
@@ -1314,10 +1314,10 @@ let _settingsSkinOnOpen = null; // track skin at open time for discard revert
 let _settingsSection = 'conversation';
 
 function switchSettingsSection(name){
-  const validSections = ['conversation','preferences','system','models','channels','usage'];
+  const validSections = ['conversation','appearance','preferences','system','models','channels','usage'];
   const section = validSections.includes(name) ? name : 'conversation';
   _settingsSection = section;
-  const sectionMap = {conversation:'Conversation',preferences:'Preferences',system:'System',models:'Models',channels:'Channels',usage:'Usage'};
+  const sectionMap = {conversation:'Conversation',appearance:'Appearance',preferences:'Preferences',system:'System',models:'Models',channels:'Channels',usage:'Usage'};
   validSections.forEach(key => {
     const tab = $('settingsTab' + sectionMap[key]);
     const pane = $('settingsPane' + sectionMap[key]);
@@ -1881,30 +1881,14 @@ async function loadModelsProviders() {
 }
 
 function confirmRemoveProvider(provider, label) {
-  // Remove any existing modal
-  const existing = $('delete-confirm-modal');
-  if (existing) existing.remove();
-  // Build modal overlay
-  const overlay = document.createElement('div');
-  overlay.id = 'delete-confirm-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  overlay.innerHTML = `
-    <div style="background:var(--surface2,#1e1e2e);border:1px solid var(--border,#333);border-radius:12px;padding:24px;max-width:340px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
-      <div style="font-size:15px;font-weight:600;margin-bottom:8px;color:var(--text)">Delete Provider</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Delete "<span style="color:var(--text)">${esc(label)}</span>"? This cannot be undone.</div>
-      <div style="display:flex;gap:10px;justify-content:flex-end">
-        <button id="delete-cancel-btn" style="padding:7px 16px;border-radius:7px;border:1px solid var(--border,#555);background:var(--surface3,#16161e);color:var(--text);cursor:pointer;font-size:13px">Cancel</button>
-        <button id="delete-confirm-btn" style="padding:7px 16px;border-radius:7px;border:none;background:#e85454;color:#fff;cursor:pointer;font-size:13px;font-weight:600">Delete</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  $('delete-cancel-btn').onclick = () => overlay.remove();
-  $('delete-confirm-btn').onclick = () => {
-    overlay.remove();
-    removeProvider(provider);
-  };
-  // Close on overlay click
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  showConfirmDialog({
+    title: 'Delete Provider',
+    message: `Delete "${label}"? This cannot be undone.`,
+    confirmLabel: 'Delete',
+    danger: true,
+  }).then(confirmed => {
+    if (confirmed) removeProvider(provider);
+  });
 }
 
 async function removeProvider(name) {

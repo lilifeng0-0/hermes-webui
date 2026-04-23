@@ -956,6 +956,9 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/onboarding/status":
         return j(handler, get_onboarding_status())
 
+    if parsed.path.startswith("/temp/"):
+        return _serve_temp_file(handler, parsed)
+
     if parsed.path.startswith("/static/"):
         return _serve_static(handler, parsed)
 
@@ -2301,6 +2304,31 @@ _STATIC_MIME = {
 }
 # MIME types that are text-based and should carry charset=utf-8
 _TEXT_MIME_TYPES = {"text/css", "application/javascript", "text/html", "image/svg+xml", "text/plain"}
+
+
+def _serve_temp_file(handler, parsed):
+    """Serve files from the temp/ directory (e.g. canvas attachments)."""
+    from urllib.parse import unquote
+    temp_root = (Path(__file__).parent.parent / "temp").resolve()
+    rel = unquote(parsed.path[len("/temp/"):])
+    file_path = (temp_root / rel).resolve()
+    try:
+        file_path.relative_to(temp_root)
+    except ValueError:
+        return j(handler, {"error": "not found"}, status=404)
+    if not file_path.exists() or not file_path.is_file():
+        return j(handler, {"error": "not found"}, status=404)
+    ext = file_path.suffix.lstrip(".").lower()
+    ct = _STATIC_MIME.get(ext, "application/octet-stream")
+    ct_header = f"{ct}; charset=utf-8" if ct in _TEXT_MIME_TYPES else ct
+    handler.send_response(200)
+    handler.send_header("Content-Type", ct_header)
+    handler.send_header("Cache-Control", "no-store")
+    raw = file_path.read_bytes()
+    handler.send_header("Content-Length", str(len(raw)))
+    handler.end_headers()
+    handler.wfile.write(raw)
+    return True
 
 
 def _serve_static(handler, parsed):

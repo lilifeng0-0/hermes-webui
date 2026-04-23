@@ -40,6 +40,8 @@
         contextMenu: { visible: false, x: 0, y: 0, items: [] },
         draggingConnection: null, // {from, fromPort, currentX, currentY}
         toast: { visible: false, message: '' },
+        floatingToolbar: { visible: false, mouseDownX: 0, mouseDownY: 0 },
+        toolbarRectBorder: '#333333',
         saveTimer: null,
         toasts: [],
         canvasAreaWidth: 3000,
@@ -57,6 +59,75 @@
         if (!this.canvas || !this.canvas.activeCanvasId) return [];
         const tab = this.canvas.canvases[this.canvas.activeCanvasId];
         return tab ? tab.connections : [];
+      },
+      floatingToolbarScreen() {
+        if (!this.floatingToolbar.visible) return null;
+        const zoom = this.zoom;
+        const panX = this.panX;
+        const panY = this.panY;
+        const canvasEl = document.getElementById('canvas-area');
+        if (!canvasEl) return null;
+        const rect = canvasEl.getBoundingClientRect();
+        return {
+          left: this.floatingToolbar.mouseDownX * zoom - panX + rect.left - 90,
+          top: this.floatingToolbar.mouseDownY * zoom - panY + rect.top - 30
+        };
+      },
+      selectedCompType() {
+        if (this.selectedIds.length !== 1) return null;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return comp ? comp.type : null;
+      },
+      toolbarTextBold() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return comp && comp.data && comp.data.bold;
+      },
+      toolbarTextItalic() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return comp && comp.data && comp.data.italic;
+      },
+      toolbarTextAlign() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return comp && comp.data && comp.data.align ? comp.data.align : 'left';
+      },
+      toolbarTextColor() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return comp && comp.data && comp.data.color ? comp.data.color : '#000000';
+      },
+      toolbarTextFontSize() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return comp && comp.data && comp.data.fontSize ? comp.data.fontSize : 16;
+      },
+      toolbarImageFlipH() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return comp && comp.data && comp.data.flipH;
+      },
+      toolbarImageFlipV() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return comp && comp.data && comp.data.flipV;
+      },
+
+      toolbarRectBg() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return (comp && comp.data && comp.data.backgroundColor) ? comp.data.backgroundColor : '#ffffff';
+      },
+      toolbarRectBorder() {
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        return (comp && comp.data && comp.data.borderColor) ? comp.data.borderColor : '#333333';
+      },
+      tmpRectRadius: {
+        get() {
+          const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+          return (comp && comp.data && comp.data.radius) ? comp.data.radius : 0;
+        },
+        set(val) {
+          const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+          if (!comp || comp.type !== 'rect') return;
+          if (!comp.data) comp.data = {};
+          const v = parseInt(val);
+          comp.data.radius = isNaN(v) ? 0 : Math.max(0, Math.min(100, v));
+          this.autoSave();
+        }
       },
       transformStyle() {
         // 正确公式: screen = zoom * (canvas + pan)
@@ -495,6 +566,176 @@
         this.contextMenu = { visible: true, x: e.clientX, y: e.clientY, items };
       },
       hideContextMenu() { this.contextMenu.visible = false; },
+
+      // ── Floating Toolbar ──────────────────────────────────────────────────
+      onFloatingToolbarMouseUp(e) {
+        const dx = Math.abs(e.clientX - this.floatingToolbar.mouseDownX);
+        const dy = Math.abs(e.clientY - this.floatingToolbar.mouseDownY);
+        if (dx < 3 && dy < 3) {
+          this.floatingToolbar.visible = false;
+        }
+      },
+      syncTmpRectRadius() {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'rect') return;
+        if (!comp.data) comp.data = {};
+        const v = parseInt(this.tmpRectRadius);
+        comp.data.radius = isNaN(v) ? 0 : Math.max(0, Math.min(100, v));
+        this.autoSave();
+      },
+      toolbarSetRectBg(color) {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'rect') return;
+        if (!comp.data) comp.data = {};
+        comp.data.backgroundColor = color;
+        this.autoSave();
+      },
+      toolbarSetRectBorder(color) {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'rect') return;
+        if (!comp.data) comp.data = {};
+        comp.data.borderColor = color;
+        this.autoSave();
+      },
+      toolbarSetBold() {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'text') return;
+        if (!comp.data) comp.data = {};
+        comp.data.bold = !comp.data.bold;
+        this.autoSave();
+      },
+      toolbarSetItalic() {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'text') return;
+        if (!comp.data) comp.data = {};
+        comp.data.italic = !comp.data.italic;
+        this.autoSave();
+      },
+      toolbarSetAlign(align) {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'text') return;
+        if (!comp.data) comp.data = {};
+        comp.data.align = align;
+        this.autoSave();
+      },
+      toolbarSetTextColor(color) {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'text') return;
+        if (!comp.data) comp.data = {};
+        comp.data.color = color;
+        this.autoSave();
+      },
+      toolbarSetFontSize(size) {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'text') return;
+        if (!comp.data) comp.data = {};
+        comp.data.fontSize = parseInt(size);
+        this.autoSave();
+      },
+      toolbarFlipH() {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'image') return;
+        if (!comp.data) comp.data = {};
+        comp.data.flipH = !comp.data.flipH;
+        this.autoSave();
+      },
+      toolbarFlipV() {
+        if (this.selectedIds.length !== 1) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.type !== 'image') return;
+        if (!comp.data) comp.data = {};
+        comp.data.flipV = !comp.data.flipV;
+        this.autoSave();
+      },
+      toolbarBringFront() {
+        if (this.selectedIds.length === 0) return;
+        const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+        if (!tab) return;
+        const maxZ = Math.max(0, ...tab.components.map(c => c.z || 0));
+        this.selectedIds.forEach(id => {
+          const comp = tab.components.find(c => c.id === id);
+          if (comp) comp.z = maxZ + 1;
+        });
+        this.autoSave();
+      },
+      toolbarSendBack() {
+        if (this.selectedIds.length === 0) return;
+        const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+        if (!tab) return;
+        const minZ = Math.min(0, ...tab.components.map(c => c.z || 0));
+        this.selectedIds.forEach(id => {
+          const comp = tab.components.find(c => c.id === id);
+          if (comp) comp.z = minZ - 1;
+        });
+        this.autoSave();
+      },
+      toolbarDuplicate() {
+        if (this.selectedIds.length === 0) return;
+        const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+        if (!tab) return;
+        const newIds = [];
+        this.selectedIds.forEach(id => {
+          const src = tab.components.find(c => c.id === id);
+          if (!src) return;
+          const copy = JSON.parse(JSON.stringify(src));
+          copy.id = 'comp-' + Date.now() + '_dup';
+          copy.x += 20;
+          copy.y += 20;
+          tab.components.push(copy);
+          newIds.push(copy.id);
+        });
+        this.selectedIds = newIds;
+        this.autoSave();
+      },
+      toolbarDelete() {
+        if (this.selectedIds.length === 0) return;
+        const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+        if (!tab) return;
+        tab.components = tab.components.filter(c => !this.selectedIds.includes(c.id));
+        this.selectedIds = [];
+        this.floatingToolbar.visible = false;
+        this.autoSave();
+      },
+      toolbarAlignComps(direction) {
+        const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+        if (!tab || this.selectedIds.length < 2) return;
+        const comps = this.selectedIds.map(id => tab.components.find(c => c.id === id)).filter(Boolean);
+        if (direction === 'h') {
+          const avgY = comps.reduce((s, c) => s + c.y, 0) / comps.length;
+          comps.forEach(c => c.y = avgY);
+        } else {
+          const avgX = comps.reduce((s, c) => s + c.x, 0) / comps.length;
+          comps.forEach(c => c.x = avgX);
+        }
+        this.autoSave();
+      },
+      toolbarDistributeComps(direction) {
+        const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+        if (!tab || this.selectedIds.length < 3) return;
+        let comps = this.selectedIds.map(id => tab.components.find(c => c.id === id)).filter(Boolean);
+        if (direction === 'h') {
+          comps.sort((a, b) => a.x - b.x);
+          const minX = comps[0].x, maxX = comps[comps.length - 1].x;
+          const step = (maxX - minX) / (comps.length - 1);
+          comps.forEach((c, i) => c.x = minX + step * i);
+        } else {
+          comps.sort((a, b) => a.y - b.y);
+          const minY = comps[0].y, maxY = comps[comps.length - 1].y;
+          const step = (maxY - minY) / (comps.length - 1);
+          comps.forEach((c, i) => c.y = minY + step * i);
+        }
+        this.autoSave();
+      },
+
       buildContextMenuItems(comps, e) {
         const isMulti = comps.length > 1;
         const isEmpty = comps.length === 0;

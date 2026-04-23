@@ -28,6 +28,7 @@
         panStartXY: { x: 0, y: 0 },
         drawingRect: null,
         marquee: null, // 框选
+        _marqueeJustPerformed: false, // 标记刚完成框选，防止 onCanvasClick 误清空选区
         componentStartPos: null,
         showZoomMenu: false,
         showSelectMenu: false,
@@ -62,21 +63,31 @@
       },
       floatingToolbarScreen() {
         if (!this.floatingToolbar.visible) return null;
-        const zoom = this.zoom;
-        const panX = this.panX;
-        const panY = this.panY;
-        const canvasEl = document.getElementById('canvas-area');
-        if (!canvasEl) return null;
-        const rect = canvasEl.getBoundingClientRect();
         return {
-          left: this.floatingToolbar.mouseDownX * zoom - panX + rect.left - 90,
-          top: this.floatingToolbar.mouseDownY * zoom - panY + rect.top - 30
+          left: this.floatingToolbar.mouseDownX - 90,
+          top: this.floatingToolbar.mouseDownY - 30
         };
       },
       selectedCompType() {
         if (this.selectedIds.length !== 1) return null;
         const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
         return comp ? comp.type : null;
+      },
+      // 多选时所有选中组件的包围框（用于绘制多选边框）
+      multiSelectBounds() {
+        if (this.selectedIds.length < 2) return null;
+        const comps = this.currentComponents.filter(c => this.selectedIds.includes(c.id));
+        if (!comps.length) return null;
+        const xs = comps.map(c => c.x);
+        const ys = comps.map(c => c.y);
+        const x2s = comps.map(c => c.x + c.width);
+        const y2s = comps.map(c => c.y + c.height);
+        return {
+          x: Math.min(...xs),
+          y: Math.min(...ys),
+          width: Math.max(...x2s) - Math.min(...xs),
+          height: Math.max(...y2s) - Math.min(...ys)
+        };
       },
       toolbarTextBold() {
         const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
@@ -246,6 +257,7 @@
         this.tool = t;
         this.isPanning = false; // 切换工具时退出移动画布模式
         this.marquee = null;
+        this._marqueeJustPerformed = false;
         this.drawingRect = null;
         document.body.style.cursor = 'default';
         this.showSelectMenu = false;
@@ -502,6 +514,7 @@
           }).map(c => c.id);
           if (selected.length > 0) {
             this.selectedIds = selected;
+            this._marqueeJustPerformed = true; // 防止点击空白时选区被清除
           }
           this.marquee = null;
         }
@@ -513,11 +526,13 @@
             const x = (e.clientX - area.left) / this.zoom + this.panX;
             const y = (e.clientY - area.top) / this.zoom + this.panY;
             this.createTextComponent(x, y);
-          } else if (this.tool === 'select' && !this._componentJustSelected) {
-            // 点击空白处取消选中（组件会通过 onComponentMouseDown 处理，不走这里）
+          } else if (this.tool === 'select' && !this._componentJustSelected && !this._marqueeJustPerformed) {
+            // 点击空白处取消选中，并隐藏悬浮工具栏
             this.selectedIds = [];
+            this.floatingToolbar.visible = false;
           }
           this._componentJustSelected = false;
+          this._marqueeJustPerformed = false;
         }
       },
 
@@ -548,8 +563,15 @@
         };
         const onUp = () => {
           if (this.componentStartPos) {
+            const didDrag = (this.componentStartPos.x !== e.clientX || this.componentStartPos.y !== e.clientY);
             this.componentStartPos = null;
             this.scheduleAutoSave();
+            // 组件点击完成（未拖动）且有选中时显示悬浮工具栏
+            if (!didDrag && this.selectedIds.length > 0) {
+              this.floatingToolbar.visible = true;
+              this.floatingToolbar.mouseDownX = e.clientX;
+              this.floatingToolbar.mouseDownY = e.clientY;
+            }
           }
           window.removeEventListener('mousemove', onMove);
           window.removeEventListener('mouseup', onUp);
@@ -839,6 +861,14 @@
           width: comp.width + 'px',
           height: comp.height + 'px',
         };
+        // 矩形：应用背景色、边框、圆角
+        if (comp.type === 'rect') {
+          style.backgroundColor = (comp.data && comp.data.backgroundColor) ? comp.data.backgroundColor : '#ffffff';
+          style.border = (comp.data && comp.data.borderColor)
+            ? `1px solid ${comp.data.borderColor}`
+            : '1px solid #333333';
+          style.borderRadius = (comp.data && comp.data.radius) ? comp.data.radius + 'px' : '0px';
+        }
         if (transforms.length) {
           style.transform = transforms.join(' ');
         }

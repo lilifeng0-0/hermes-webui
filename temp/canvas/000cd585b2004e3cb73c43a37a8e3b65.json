@@ -2,7 +2,7 @@
   "id": "000cd585b2004e3cb73c43a37a8e3b65",
   "name": "我的画布",
   "created": 1776947078.6284432,
-  "modified": 1776950474.1438422,
+  "modified": 1776951383.9325354,
   "zoom": 1,
   "panX": 0,
   "panY": 0,
@@ -45,7 +45,7 @@
           "id": "comp-1776950459082-lbba",
           "locked": false,
           "type": "rect",
-          "x": 507,
+          "x": 509,
           "y": 241,
           "width": 278,
           "height": 172,
@@ -55,8 +55,8 @@
           "id": "comp-1776950461160-mazt",
           "locked": false,
           "type": "rect",
-          "x": 677,
-          "y": 167,
+          "x": 938,
+          "y": 132,
           "width": 143,
           "height": 113,
           "data": {}
@@ -77,6 +77,22 @@
             "align": "left",
             "bold": false,
             "italic": false
+          }
+        },
+        {
+          "id": "comp-1776950475955-3g5s",
+          "locked": false,
+          "type": "image",
+          "x": 568,
+          "y": 504,
+          "width": 200,
+          "height": 150,
+          "data": {
+            "path": "temp/canvas/attachments/000cd585b2004e3cb73c43a37a8e3b65/comp-1776950475955-3g5s_微信截图_20190301101807.png",
+            "width": 200,
+            "height": 150,
+            "flipH": false,
+            "flipV": false
           }
         }
       ],

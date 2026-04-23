@@ -2,13 +2,13 @@
   "id": "000cd585b2004e3cb73c43a37a8e3b65",
   "name": "我的画布",
   "created": 1776947078.6284432,
-  "modified": 1776948406.221608,
-  "zoom": 0.39999999999999997,
-  "panX": 864.0898721161873,
-  "panY": -347.9156399156401,
-  "activeCanvasId": "0847f52329ac480f927460e5027b767e",
+  "modified": 1776950474.1438422,
+  "zoom": 1,
+  "panX": 0,
+  "panY": 0,
+  "activeCanvasId": "tab-1776950454995",
   "canvases": {
-    "0847f52329ac480f927460e5027b767e": {
+    "tab-1776949203229": {
       "zoom": 0.3,
       "panX": -672.576794550479,
       "panY": -979.5823065823066,
@@ -22,6 +22,62 @@
           "width": 500,
           "height": 460,
           "data": {}
+        },
+        {
+          "id": "comp-1776949019598-inec",
+          "locked": false,
+          "type": "rect",
+          "x": 2209.0898721161875,
+          "y": 454.5843600843599,
+          "width": 542.5,
+          "height": 322.5000000000001,
+          "data": {}
+        }
+      ],
+      "connections": []
+    },
+    "tab-1776950454995": {
+      "zoom": 1,
+      "panX": 0,
+      "panY": 0,
+      "components": [
+        {
+          "id": "comp-1776950459082-lbba",
+          "locked": false,
+          "type": "rect",
+          "x": 507,
+          "y": 241,
+          "width": 278,
+          "height": 172,
+          "data": {}
+        },
+        {
+          "id": "comp-1776950461160-mazt",
+          "locked": false,
+          "type": "rect",
+          "x": 677,
+          "y": 167,
+          "width": 143,
+          "height": 113,
+          "data": {}
+        },
+        {
+          "id": "comp-1776950466140-f4tn",
+          "locked": false,
+          "type": "text",
+          "x": 978,
+          "y": 328,
+          "width": 200,
+          "height": 40,
+          "data": {
+            "content": "",
+            "color": "#333",
+            "fontSize": 16,
+            "fontFamily": "sans-serif",
+            "align": "left",
+            "bold": false,
+            "italic": false
+          }
         }
       ],
       "connections": []

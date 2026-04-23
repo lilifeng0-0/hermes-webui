@@ -596,6 +596,9 @@
         if (dx < 3 && dy < 3) {
           this.floatingToolbar.visible = false;
         }
+        // 重置标志，防止影响后续点击空白处的选区清除
+        this._componentJustSelected = false;
+        this._marqueeJustPerformed = false;
       },
       syncTmpRectRadius() {
         if (this.selectedIds.length !== 1) return;

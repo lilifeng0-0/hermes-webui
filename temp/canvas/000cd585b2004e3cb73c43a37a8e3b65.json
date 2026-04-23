@@ -2,10 +2,10 @@
   "id": "000cd585b2004e3cb73c43a37a8e3b65",
   "name": "我的画布",
   "created": 1776947078.6284432,
-  "modified": 1776951383.9325354,
+  "modified": 1776953366.8545089,
   "zoom": 1,
-  "panX": 0,
-  "panY": 0,
+  "panX": 0.5294117647059693,
+  "panY": -0.35294117647055145,
   "activeCanvasId": "tab-1776950454995",
   "canvases": {
     "tab-1776949203229": {
@@ -46,10 +46,14 @@
           "locked": false,
           "type": "rect",
           "x": 509,
-          "y": 241,
+          "y": 240,
           "width": 278,
           "height": 172,
-          "data": {}
+          "data": {
+            "backgroundColor": "#e22828",
+            "borderColor": "#089611",
+            "radius": 18
+          }
         },
         {
           "id": "comp-1776950461160-mazt",
@@ -59,7 +63,9 @@
           "y": 132,
           "width": 143,
           "height": 113,
-          "data": {}
+          "data": {
+            "borderColor": "#f00000"
+          }
         },
         {
           "id": "comp-1776950466140-f4tn",

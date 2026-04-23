@@ -327,10 +327,9 @@ body {
   box-shadow: 0 8px 24px rgba(0,0,0,0.25);
 }
 
-/* Hover光效由JS boxShadow接管，禁用CSS outline */
+/* Hover光效 */
 .canvas-component:hover:not(.selected):not(.is-dragging) {
-  /* outline: 1.5px solid var(--canvas-blue);
-  outline-offset: 2px; */
+  box-shadow: 0 0 8px rgba(74, 144, 217, 0.8), 0 0 20px rgba(74, 144, 217, 0.4);
 }
 
 .canvas-component.locked {

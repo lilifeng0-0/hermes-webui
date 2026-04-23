@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>万能画布</title>
   <script src="/static/vue.global.prod.js"></script>
-  <link rel="stylesheet" href="/static/canvas.css?v=14">
+  <link rel="stylesheet" href="/static/canvas.css?v=17">
 </head>
 <body>
   <div id="app">
@@ -256,7 +256,7 @@
         <!-- 悬浮工具栏（按组件类型显示不同按钮） -->
         <div v-if="floatingToolbar.visible && floatingToolbarScreen" class="floating-toolbar"
              :style="{ left: floatingToolbarScreen.left + 'px', top: floatingToolbarScreen.top + 'px' }"
-             @mousedown.stop @mousemove.stop
+             @mousedown.stop @mousemove.stop @mouseup.stop="onFloatingToolbarMouseUp"
 >
           <!-- 单选-文本 -->
           <template v-if="selectedIds.length === 1 && selectedCompType === 'text'">
@@ -363,6 +363,6 @@
   </div>
 
   <script src="/static/canvas-api.js"></script>
-  <script src="/static/canvas.js?v=15"></script>
+  <script src="/static/canvas.js?v=17"></script>
 </body>
 </html>

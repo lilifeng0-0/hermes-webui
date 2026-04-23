@@ -1,0 +1,19 @@
+{
+  "id": "000cd585b2004e3cb73c43a37a8e3b65",
+  "name": "我的画布",
+  "created": 1776947078.6284432,
+  "modified": 1776947080.1785572,
+  "zoom": 1,
+  "panX": 0,
+  "panY": 0,
+  "activeCanvasId": "0847f52329ac480f927460e5027b767e",
+  "canvases": {
+    "0847f52329ac480f927460e5027b767e": {
+      "zoom": 1,
+      "panX": 0,
+      "panY": 0,
+      "components": [],
+      "connections": []
+    }
+  }
+}

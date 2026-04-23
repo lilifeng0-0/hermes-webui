@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>万能画布</title>
   <script src="/static/vue.global.prod.js"></script>
-  <link rel="stylesheet" href="/static/canvas.css?v=13">
+  <link rel="stylesheet" href="/static/canvas.css?v=14">
 </head>
 <body>
   <div id="app">
@@ -134,6 +134,14 @@
               </marker>
             </defs>
             <g v-for="conn in currentConnections" :key="conn.id">
+              <!-- 透明粗线条扩大命中区域（不影响视觉） -->
+              <path :d="getConnectionPath(conn)"
+                    fill="none" stroke="transparent" stroke-width="12"
+                    style="pointer-events: stroke; cursor: pointer;"
+                    @click.stop="onConnectionClick(conn)"
+                    @contextmenu.prevent.stop="onConnectionContextMenu($event, conn)"
+                    @mouseenter="onConnectionHover(conn)"
+                    @mouseleave="onConnectionLeave(conn)" />
               <path :d="getConnectionPath(conn)" class="connection-path"
                     :class="{selected: selectedIds.includes(conn.from) || selectedIds.includes(conn.to), hovered: hoveredConnId === conn.id}"
                     @click.stop="onConnectionClick(conn)"
@@ -355,6 +363,6 @@
   </div>
 
   <script src="/static/canvas-api.js"></script>
-  <script src="/static/canvas.js?v=13"></script>
+  <script src="/static/canvas.js?v=14"></script>
 </body>
 </html>

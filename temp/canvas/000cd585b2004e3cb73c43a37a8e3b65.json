@@ -2,17 +2,28 @@
   "id": "000cd585b2004e3cb73c43a37a8e3b65",
   "name": "我的画布",
   "created": 1776947078.6284432,
-  "modified": 1776947080.1785572,
-  "zoom": 1,
-  "panX": 0,
-  "panY": 0,
+  "modified": 1776948406.221608,
+  "zoom": 0.39999999999999997,
+  "panX": 864.0898721161873,
+  "panY": -347.9156399156401,
   "activeCanvasId": "0847f52329ac480f927460e5027b767e",
   "canvases": {
     "0847f52329ac480f927460e5027b767e": {
-      "zoom": 1,
-      "panX": 0,
-      "panY": 0,
-      "components": [],
+      "zoom": 0.3,
+      "panX": -672.576794550479,
+      "panY": -979.5823065823066,
+      "components": [
+        {
+          "id": "comp-1776948386325-dsox",
+          "locked": false,
+          "type": "rect",
+          "x": 1414.089872116188,
+          "y": -459.5823065823066,
+          "width": 500,
+          "height": 460,
+          "data": {}
+        }
+      ],
       "connections": []
     }
   }

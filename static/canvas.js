@@ -1030,7 +1030,7 @@
       // ── Skills ──────────────────────────────────────────────────
       async loadSkillsList() {
         try {
-          const resp = await fetch('/api/skills/list');
+          const resp = await fetch('/api/skills');
           if (!resp.ok) throw new Error('API not available');
           const data = await resp.json();
           this.skills = data.skills || [];

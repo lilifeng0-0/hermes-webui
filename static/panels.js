@@ -30,7 +30,7 @@ async function loadCanvas() {
   // Create iframe to load canvas
   const iframe = document.createElement('iframe');
   iframe.id = 'canvasIframe';
-  iframe.src = '/static/canvas.html?v=20';
+  iframe.src = '/static/canvas.html?v=21';
   iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;';
   iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
   panel.innerHTML = '';

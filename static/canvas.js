@@ -21,6 +21,7 @@
         panY: 0,
         tool: 'select',
         selectedIds: [],
+        hoveredConnId: null,
         editingTextId: null,
         editingCanvasId: null,
         isPanning: false,
@@ -1430,6 +1431,16 @@
         };
       },
 
+      onConnectionHover(conn) {
+        this.hoveredConnId = conn.id;
+      },
+
+      onConnectionLeave(conn) {
+        if (this.hoveredConnId === conn.id) {
+          this.hoveredConnId = null;
+        }
+      },
+
       deleteConnection(connId) {
         this.pushUndo();
         const tab = this.canvas.canvases[this.canvas.activeCanvasId];
@@ -1731,7 +1742,7 @@
           this.showSelectWorkflowDialog = true;
           return;
         }
-        const results = await window.CanvasWorkflow.runWorkflow(tab, nodeId);
+        const results = await window.CanvasWorkflow.runWorkflow(this.canvas, nodeId);
         if (results?.success === false) {
           this.showToast(results.error || '执行失败');
           return;
@@ -1745,7 +1756,7 @@
         if (!subgraph || !subgraph.nodes.size) return;
         const nodeId = [...subgraph.nodes][0];
         const results = await window.CanvasWorkflow.runWorkflow(
-          this.canvas?.canvases?.[this.canvas?.activeCanvasId], nodeId);
+          this.canvas, nodeId);
         this.workflowLogs = results || [];
         this.sendWorkflowToChat(results || []);
       },

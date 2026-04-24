@@ -520,7 +520,7 @@
 
     // 构建子图组件映射
     const compMap = new Map();
-    for (const comp of norm.components) {
+    for (const comp of canvas.components) {
       if (subgraph.nodes.has(comp.id)) {
         compMap.set(comp.id, comp);
       }

@@ -66,12 +66,10 @@
         if (this.selectedIds.length === 1) {
           const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
           if (comp) {
-            // 与组件渲染相同的坐标变换：translate(-panX*zoom, -panY*zoom) scale(zoom)
-            // 组件 canvas=(comp.x, comp.y) → screen=(panX*zoom + zoom*comp.x, panY*zoom + zoom*comp.y)
-            const screenX = this.panX * this.zoom + this.zoom * comp.x;
-            const screenY = this.panY * this.zoom + this.zoom * comp.y;
-            // 工具栏宽度180，高度36，居中显示在组件上方
-            return { left: screenX - 90, top: screenY - 40 };
+            // 工具栏现在在 .canvas-transform 内部（继承 transform: translate(-panX*zoom,-panY*zoom) scale(zoom)）
+            // 所以用 canvas 坐标直接定位，自动完成缩放
+            // 工具栏居中于组件顶部上方
+            return { left: comp.x + comp.width / 2 - 90, top: comp.y - 40 };
           }
         }
         return {

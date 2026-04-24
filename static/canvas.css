@@ -319,6 +319,11 @@ body {
   /* 不设 overflow/clip-path，由 .comp-rect 自身负责圆角 */
 }
 
+/* 非文本组件常态阴影（image/video/rect/note/skill） */
+.canvas-component:not(.comp-text) {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
 .canvas-component.selected {
   outline: none !important;
 }

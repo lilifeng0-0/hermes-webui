@@ -63,13 +63,15 @@
       },
       floatingToolbarScreen() {
         if (!this.floatingToolbar.visible) return null;
-        // 优先使用组件位置（始终显示在组件上方居中）
         if (this.selectedIds.length === 1) {
           const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
           if (comp) {
-            const screenX = this.panX + this.zoom * comp.x;
-            const screenY = this.panY + this.zoom * comp.y;
-            return { left: screenX - 90, top: screenY - 36 };
+            // 与组件渲染相同的坐标变换：translate(-panX*zoom, -panY*zoom) scale(zoom)
+            // 组件 canvas=(comp.x, comp.y) → screen=(panX*zoom + zoom*comp.x, panY*zoom + zoom*comp.y)
+            const screenX = this.panX * this.zoom + this.zoom * comp.x;
+            const screenY = this.panY * this.zoom + this.zoom * comp.y;
+            // 工具栏宽度180，高度36，居中显示在组件上方
+            return { left: screenX - 90, top: screenY - 40 };
           }
         }
         return {
@@ -610,9 +612,12 @@
         }
       },
       onWindowMouseUp(e) {
-        // 始终重置标志（确保点击空白处能取消选中）
-        this._componentJustSelected = false;
-        this._marqueeJustPerformed = false;
+        // 延迟重置 marquee 标志，等 onCanvasClick 先执行完再清除
+        // 否则 onCanvasClick 会在标志检查前就看到 false
+        requestAnimationFrame(() => {
+          this._componentJustSelected = false;
+          this._marqueeJustPerformed = false;
+        });
         // 如果工具栏可见且鼠标在工具栏外松开，隐藏工具栏
         if (this.floatingToolbar.visible) {
           const toolbar = document.querySelector('.floating-toolbar');

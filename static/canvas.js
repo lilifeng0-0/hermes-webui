@@ -1742,7 +1742,7 @@
           this.showSelectWorkflowDialog = true;
           return;
         }
-        const results = await window.CanvasWorkflow.runWorkflow(this.canvas, nodeId);
+        const results = await window.CanvasWorkflow.runWorkflow(tab, nodeId);
         if (results?.success === false) {
           this.showToast(results.error || '执行失败');
           return;
@@ -1755,8 +1755,8 @@
         const subgraph = this.workflowSubgraphs[subgraphIndex];
         if (!subgraph || !subgraph.nodes.size) return;
         const nodeId = [...subgraph.nodes][0];
-        const results = await window.CanvasWorkflow.runWorkflow(
-          this.canvas, nodeId);
+        const tab = this.canvas?.canvases?.[this.canvas?.activeCanvasId];
+        const results = await window.CanvasWorkflow.runWorkflow(tab, nodeId);
         this.workflowLogs = results || [];
         this.sendWorkflowToChat(results || []);
       },

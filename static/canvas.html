@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>万能画布</title>
   <script src="/static/vue.global.prod.js"></script>
-  <link rel="stylesheet" href="/static/canvas.css?v=22">
+  <link rel="stylesheet" href="/static/canvas.css?v=23">
 </head>
 <body>
   <div id="app">
@@ -252,10 +252,12 @@
                  height: Math.abs(marquee.canvasY - marquee.startY) + 'px'
                }"></div>
 
-          <!-- 悬浮工具栏（移入 canvas-transform 内，使用 canvas 坐标，始终跟随组件） -->
-          <div v-if="floatingToolbar.visible && floatingToolbarScreen" class="floating-toolbar"
-               :style="{ left: floatingToolbarScreen.left + 'px', top: floatingToolbarScreen.top + 'px' }"
-               @mousedown.stop @mouseup.stop="onFloatingToolbarMouseUp">
+        </div>
+
+        <!-- 悬浮工具栏（在 .canvas-area 层，和 .canvas-transform 同级，使用屏幕坐标） -->
+        <div v-if="floatingToolbar.visible && floatingToolbarScreen" class="floating-toolbar"
+             :style="{ left: floatingToolbarScreen.left + 'px', top: floatingToolbarScreen.top + 'px' }"
+             @mousedown.stop @mouseup.stop="onFloatingToolbarMouseUp">
             <!-- 单选-文本 -->
             <template v-if="selectedIds.length === 1 && selectedCompType === 'text'">
               <div class="toolbar-group">
@@ -362,6 +364,6 @@
   </div>
 
   <script src="/static/canvas-api.js"></script>
-  <script src="/static/canvas.js?v=22"></script>
+  <script src="/static/canvas.js?v=23"></script>
 </body>
 </html>

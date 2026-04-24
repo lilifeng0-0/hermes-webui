@@ -2,10 +2,10 @@
   "id": "000cd585b2004e3cb73c43a37a8e3b65",
   "name": "我的画布",
   "created": 1776947078.6284432,
-  "modified": 1776994409.094037,
-  "zoom": 0.9500000000000002,
-  "panX": 323.4088148728929,
-  "panY": 62.91493977443622,
+  "modified": 1776995361.490813,
+  "zoom": 0.7499999999999998,
+  "panX": -205.4571445317979,
+  "panY": -94.12034424447467,
   "activeCanvasId": "tab-1776950454995",
   "canvases": {
     "tab-1776949203229": {
@@ -45,8 +45,8 @@
           "id": "comp-1776950459082-lbba",
           "locked": false,
           "type": "rect",
-          "x": 617,
-          "y": 322,
+          "x": 502.8333333333333,
+          "y": 156.16666666666677,
           "width": 278,
           "height": 172,
           "data": {
@@ -59,8 +59,8 @@
           "id": "comp-1776950461160-mazt",
           "locked": false,
           "type": "rect",
-          "x": 921.8571428571429,
-          "y": 216.46886446886447,
+          "x": 858.5238095238096,
+          "y": 283.1355311355311,
           "width": 143,
           "height": 113,
           "data": {
@@ -72,8 +72,8 @@
           "id": "comp-1776950466140-f4tn",
           "locked": false,
           "type": "text",
-          "x": 434.99300699300704,
-          "y": 528.0979020979021,
+          "x": 517.0982701509017,
+          "y": 399.6768494663232,
           "width": 200,
           "height": 40,
           "data": {
@@ -81,7 +81,7 @@
             "color": "#333",
             "fontSize": 16,
             "fontFamily": "sans-serif",
-            "align": "right",
+            "align": "left",
             "bold": false,
             "italic": false
           }
@@ -90,8 +90,8 @@
           "id": "comp-1776950475955-3g5s",
           "locked": false,
           "type": "image",
-          "x": 1104.923076923077,
-          "y": 190.92307692307702,
+          "x": 1003.5897435897435,
+          "y": 90.92307692307699,
           "width": 200,
           "height": 150,
           "data": {
@@ -101,9 +101,30 @@
             "flipH": false,
             "flipV": false
           }
+        },
+        {
+          "id": "comp-1776995342990-stfj",
+          "locked": false,
+          "type": "skill",
+          "x": 238.2178191193787,
+          "y": 157.5139239808604,
+          "width": 160,
+          "height": 80,
+          "data": {
+            "skillName": "webhook-subscriptions",
+            "skillDesc": "Create and manage webhook subscriptions for event-driven agent activation. Use when the user wants external services to trigger agent runs automatically."
+          }
         }
       ],
-      "connections": []
+      "connections": [
+        {
+          "id": "conn-1776995055180",
+          "from": "comp-1776950459082-lbba",
+          "to": "comp-1776950461160-mazt",
+          "fromPort": "right",
+          "toPort": "bottom"
+        }
+      ]
     }
   }
 }

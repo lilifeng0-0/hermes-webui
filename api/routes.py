@@ -2282,6 +2282,21 @@ def handle_post(handler, parsed) -> bool:
         handler.wfile.write(json.dumps({"ok": True}).encode())
         return True
 
+    # ── Workflow execution (POST) ──
+    if parsed.path == "/api/workflow/execute":
+        try:
+            node_id = body.get("node_id")
+            if not node_id:
+                return j(handler, {"error": "node_id is required"}, status=400)
+            action = body.get("action", "run")
+            if action not in ("run", "stop"):
+                return j(handler, {"error": "action must be 'run' or 'stop'"}, status=400)
+            from api.workflow_engine import execute_node
+            result = execute_node(node_id, action)
+            return j(handler, result)
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=500)
+
     return False  # 404
 
 # ── GET route helpers ─────────────────────────────────────────────────────────

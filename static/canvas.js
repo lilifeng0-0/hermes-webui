@@ -47,6 +47,10 @@
         toasts: [],
         canvasAreaWidth: 3000,
         canvasAreaHeight: 2000,
+        workflowLogs: [],         // 执行日志列表
+        workflowPanel: { visible: false, nodeId: null, x: 200, y: 200 }, // 日志浮层
+        showSelectWorkflowDialog: false, // 多工作流选择弹窗
+        workflowSubgraphs: [],     // 当前画布所有连通子图（用于选择弹窗）
       };
     },
 
@@ -205,6 +209,21 @@
       window.addEventListener('keyup', this.onKeyUp);
       window.addEventListener('mouseup', this.onWindowMouseUp);
       document.addEventListener('click', this.hideContextMenu);
+
+      // 工作流状态更新监听
+      window.addEventListener('workflow:componentStatus', (e) => {
+        const { compId, status, progress, result } = e.detail;
+        const tab = this.canvas?.canvases?.[this.canvas?.activeCanvasId];
+        if (!tab) return;
+        const comp = tab.components.find(c => c.id === compId);
+        if (comp) {
+          if (!comp.data) comp.data = {};
+          comp.data.status = status;
+          comp.data.progress = progress;
+          comp.data.lastRunResult = result;
+        }
+        this.$forceUpdate();
+      });
     },
 
     beforeUnmount() {
@@ -913,6 +932,21 @@
               { label: '导出', action: () => this.exportComponent(comp) }
             );
           }
+          items.push(
+            { divider: true },
+            { label: '▶ 执行此工作流', action: () => this.executeWorkflowNode(comp.id) },
+            { label: '📋 工作流日志', action: () => this.openWorkflowPanel(comp.id) },
+            { label: '---' },
+            { label: '触发模式', submenu: [
+                { label: '手动 (manual)', action: () => this.setTriggerMode(comp.id, 'manual') },
+                { label: '自动 (auto)', action: () => this.setTriggerMode(comp.id, 'auto') },
+              ]},
+            { label: '执行引擎', submenu: [
+                { label: '自动判断', action: () => this.setEngine(comp.id, 'auto') },
+                { label: 'Hermes Agent', action: () => this.setEngine(comp.id, 'hermes') },
+                { label: '内置运行时', action: () => this.setEngine(comp.id, 'builtin') },
+              ]},
+          );
         }
         return items;
       },
@@ -1676,7 +1710,68 @@
           }
         }
       },
-    },
+
+      // ── 工作流 ─────────────────────────────────────────────────
+      openWorkflowPanel(nodeId) {
+        this.workflowPanel = { visible: true, nodeId, x: 300, y: 200 };
+      },
+      closeWorkflowPanel() {
+        this.workflowPanel.visible = false;
+      },
+      async executeWorkflowNode(nodeId) {
+        if (!window.CanvasWorkflow) {
+          this.showToast('工作流引擎未加载，请刷新页面');
+          return;
+        }
+        const tab = this.canvas?.canvases?.[this.canvas?.activeCanvasId];
+        if (!tab) return;
+        const subgraphs = window.CanvasWorkflow.getAllConnectedSubgraphs(tab);
+        if (subgraphs.length > 1) {
+          this.workflowSubgraphs = subgraphs;
+          this.showSelectWorkflowDialog = true;
+          return;
+        }
+        const results = await window.CanvasWorkflow.runWorkflow(tab, nodeId);
+        if (results?.success === false) {
+          this.showToast(results.error || '执行失败');
+          return;
+        }
+        this.workflowLogs = results || [];
+        this.sendWorkflowToChat(results || []);
+      },
+      async executeSelectedWorkflow(subgraphIndex) {
+        this.showSelectWorkflowDialog = false;
+        const subgraph = this.workflowSubgraphs[subgraphIndex];
+        if (!subgraph || !subgraph.nodes.size) return;
+        const nodeId = [...subgraph.nodes][0];
+        const results = await window.CanvasWorkflow.runWorkflow(
+          this.canvas?.canvases?.[this.canvas?.activeCanvasId], nodeId);
+        this.workflowLogs = results || [];
+        this.sendWorkflowToChat(results || []);
+      },
+      sendWorkflowToChat(results) {
+        if (!results || results.length === 0) return;
+        const tab = this.canvas?.canvases?.[this.canvas?.activeCanvasId];
+        const summary = results.map((r, i) => {
+          const comp = tab?.components?.find(c => c.id === r.compId);
+          const name = comp?.data?.name || comp?.type || r.compId;
+          return `${i+1}. [${r.metadata?.engine}] ${name}: ${typeof r.result === 'object' ? JSON.stringify(r.result)?.slice(0,80) : r.result}`.slice(0, 200);
+        }).join('\n');
+        if (window._hermesSendMessage) {
+          window._hermesSendMessage('🖥️ **工作流执行完成**\n\n' + summary + '\n\n耗时: ' + results.reduce((s,r) => s + (r.metadata?.duration || 0), 0).toFixed(1) + 's');
+        }
+      },
+      setTriggerMode(compId, mode) {
+        const tab = this.canvas?.canvases?.[this.canvas?.activeCanvasId];
+        const comp = tab?.components?.find(c => c.id === compId);
+        if (comp) { comp.data = comp.data || {}; comp.data.triggerMode = mode; }
+      },
+      setEngine(compId, engine) {
+        const tab = this.canvas?.canvases?.[this.canvas?.activeCanvasId];
+        const comp = tab?.components?.find(c => c.id === compId);
+        if (comp) { comp.data = comp.data || {}; comp.data.engine = engine; }
+      },
+    }
   });
 
   app.mount('#app');

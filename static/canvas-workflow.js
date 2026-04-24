@@ -5,23 +5,37 @@
   // ── 并发控制 ──────────────────────────────────────────────
   const _runningWorkflows = new Set();
 
+  // ── 规范化 canvas 数据 ────────────────────────────────────
+  // 支持 { canvases: {[id]: {components, connections}}, activeCanvasId }
+  // 和 { components, connections } 两种格式
+  function normalizeCanvas(canvas) {
+    if (canvas.canvases && canvas.activeCanvasId) {
+      const tab = canvas.canvases[canvas.activeCanvasId];
+      return tab ? { components: tab.components || [], connections: tab.connections || [] } : null;
+    }
+    return { components: canvas.components || [], connections: canvas.connections || [] };
+  }
+
   // ── 图构建 ─────────────────────────────────────────────────
   // 从 canvas.components 和 canvas.connections 构建邻接表（含逆向索引）
   // 返回 { graph: Map<fromId, toIds[]>, reverse: Map<toId, fromIds[]>, nodes: Set<id> }
   function buildGraph(canvas) {
-    const nodes = new Set();
+    const norm = normalizeCanvas(canvas);
+    if (!norm) return { graph: new Map(), reverse: new Map(), nodes: new Set() };
+    const { components, connections } = norm;
     const graph = new Map();    // 正向：从 A 出发的所有出边目标
     const reverse = new Map();  // 逆向：指向 A 的所有入边来源
 
     // 初始化所有节点
-    for (const comp of canvas.components) {
+    const nodes = new Set();
+    for (const comp of components) {
       nodes.add(comp.id);
       graph.set(comp.id, []);
       reverse.set(comp.id, []);
     }
 
     // 构建邻接表
-    for (const conn of canvas.connections) {
+    for (const conn of connections) {
       if (nodes.has(conn.from) && nodes.has(conn.to)) {
         graph.get(conn.from).push(conn.to);
         reverse.get(conn.to).push(conn.from);
@@ -32,9 +46,9 @@
   }
 
   // ── 拓扑排序 (Kahn 算法) ───────────────────────────────────
-  function topologicalSort(graph) {
+  function topologicalSort(graph, nodes) {
     const inDegree = new Map();
-    const allNodes = graph.keys();
+    const allNodes = nodes || graph.keys();
 
     // 初始化入度
     for (const node of allNodes) {
@@ -71,8 +85,8 @@
   }
 
   // ── 环路检测 ──────────────────────────────────────────────
-  function hasCycle(sorted, graph) {
-    return sorted.length < graph.size;
+  function hasCycle(sorted, graph, nodes) {
+    return sorted.length < (nodes ? nodes.size : graph.size);
   }
 
   // ── 连通子图 (BFS，双向遍历捕获完整上游链) ────────────────
@@ -101,7 +115,9 @@
 
     // 收集子图内的边
     const subgraphEdges = [];
-    for (const conn of canvas.connections) {
+    const norm = normalizeCanvas(canvas);
+    if (!norm) return { nodes: new Set(), edges: [], components: new Map() };
+    for (const conn of norm.connections) {
       if (subgraphNodes.has(conn.from) && subgraphNodes.has(conn.to)) {
         subgraphEdges.push(conn);
       }
@@ -109,7 +125,7 @@
 
     // 收集子图内的组件
     const subgraphComponents = new Map();
-    for (const comp of canvas.components) {
+    for (const comp of norm.components) {
       if (subgraphNodes.has(comp.id)) {
         subgraphComponents.set(comp.id, comp);
       }
@@ -120,6 +136,8 @@
 
   // ── 所有连通子图 ──────────────────────────────────────────
   function getAllConnectedSubgraphs(canvas) {
+    const norm = normalizeCanvas(canvas);
+    if (!norm) return [];
     const { nodes } = buildGraph(canvas);
     const visited = new Set();
     const subgraphs = [];
@@ -136,7 +154,7 @@
         const current = queue.shift();
         componentNodes.add(current);
 
-        for (const conn of canvas.connections) {
+        for (const conn of norm.connections) {
           if (conn.from === current && !visited.has(conn.to)) {
             visited.add(conn.to);
             queue.push(conn.to);
@@ -149,7 +167,7 @@
       }
 
       // 构建子图
-      const subgraphEdges = canvas.connections.filter(
+      const subgraphEdges = norm.connections.filter(
         conn => componentNodes.has(conn.from) && componentNodes.has(conn.to)
       );
 
@@ -395,7 +413,7 @@
 
     if (engine === 'hermes') {
       // 调用 Hermes Agent
-      const result = await window.CanvasAPI.executeWorkflow(comp.id, 'run');
+      const result = await window.CanvasAPI.executeWorkflow(comp.id, 'run', canvas.id);
       return {
         result: result.data || result,
         metadata: {
@@ -461,8 +479,15 @@
   }
 
   // ── 主执行函数 ─────────────────────────────────────────────
+  // canvas: 画布数据，可以是 { canvases: {[id]: {components, connections}}, activeCanvasId }
+  //         也可以是直接的 { components, connections } 结构
   async function runWorkflow(canvas, targetId) {
-    // 并发控制：防止同一工作流重复执行
+    // 规范化 canvas 数据（支持嵌套结构或直接结构）
+    if (canvas.canvases && canvas.activeCanvasId) {
+      const tab = canvas.canvases[canvas.activeCanvasId];
+      if (!tab) return { success: false, error: 'No active canvas' };
+      canvas = { components: tab.components || [], connections: tab.connections || [] };
+    }
     const workflowKey = targetId || 'full';
     if (_runningWorkflows.has(workflowKey)) {
       return { success: false, error: 'Workflow already running' };
@@ -488,14 +513,14 @@
       tempGraph.get(edge.from)?.push(edge.to);
     }
 
-    const sorted = topologicalSort(tempGraph);
-    if (hasCycle(sorted, tempGraph)) {
+    const sorted = topologicalSort(tempGraph, subgraph.nodes);
+    if (hasCycle(sorted, tempGraph, subgraph.nodes)) {
       return { success: false, error: 'Cycle detected in workflow' };
     }
 
     // 构建子图组件映射
     const compMap = new Map();
-    for (const comp of canvas.components) {
+    for (const comp of norm.components) {
       if (subgraph.nodes.has(comp.id)) {
         compMap.set(comp.id, comp);
       }

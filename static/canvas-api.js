@@ -27,11 +27,13 @@ const CanvasAPI = {
     fd.append('file', file);
     return fetch('/api/canvas/upload', {method: 'POST', body: fd}).then(r => r.json());
   },
-  executeWorkflow(nodeId, action = 'run') {
+  executeWorkflow(nodeId, action = 'run', canvasId = null) {
+    const body = {node_id: nodeId, action};
+    if (canvasId) body.canvas_id = canvasId;
     return fetch('/api/workflow/execute', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({node_id: nodeId, action})
+      body: JSON.stringify(body)
     }).then(r => r.json());
   }
 };

@@ -2292,7 +2292,8 @@ def handle_post(handler, parsed) -> bool:
             if action not in ("run", "stop"):
                 return j(handler, {"error": "action must be 'run' or 'stop'"}, status=400)
             from api.workflow_engine import execute_node
-            result = execute_node(node_id, action)
+            canvas_id = body.get("canvas_id")
+            result = execute_node(node_id, action, canvas_id)
             return j(handler, result)
         except Exception as e:
             return j(handler, {"error": str(e)}, status=500)

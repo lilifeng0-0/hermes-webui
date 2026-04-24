@@ -358,6 +358,45 @@
       <!-- 隐藏的文件上传 input（必须放在 #app 内才能被 Vue 的 @change 绑定） -->
       <input type="file" id="imageUpload" accept="image/bmp,image/jpeg,image/png,image/webp" style="display:none" @change="handleImageUpload">
       <input type="file" id="videoUpload" accept="video/mp4,video/webm,video/quicktime,video/x-m4v" style="display:none" @change="handleVideoUpload">
+
+      <!-- 工作流日志浮层 -->
+      <div v-if="workflowPanel.visible" class="workflow-log-panel">
+        <div class="wf-log-header">
+          <span>📋 执行日志</span>
+          <button class="wf-log-close" @click="closeWorkflowPanel">×</button>
+        </div>
+        <div class="wf-log-body">
+          <div v-if="workflowLogs.length === 0" class="wf-log-empty">
+            暂无执行记录。右键点击组件执行工作流。
+          </div>
+          <div v-for="(log, idx) in workflowLogs" :key="idx" class="wf-log-entry"
+               :class="'status-' + (log.metadata && log.metadata.error ? 'failed' : 'success')">
+            <div class="wf-log-title">
+              <span class="wf-log-icon">{{ log.metadata && log.metadata.error ? '✗' : '✓' }}</span>
+              <span class="wf-log-name">{{ log.compId }}</span>
+              <span class="wf-log-engine">[{{ log.metadata ? log.metadata.engine : '?' }}]</span>
+              <span class="wf-log-duration">{{ log.metadata ? (log.metadata.duration || 0).toFixed(2) : '0.00' }}s</span>
+            </div>
+            <div class="wf-log-result">{{ typeof log.result === 'object' ? JSON.stringify(log.result).slice(0,120) : log.result }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 多工作流选择弹窗 -->
+      <div v-if="showSelectWorkflowDialog" class="workflow-select-overlay" @click.self="showSelectWorkflowDialog = false">
+        <div class="workflow-select-panel">
+          <div class="wf-select-header">选择要执行的工作流</div>
+          <div class="wf-select-body">
+            <div v-for="(sg, idx) in workflowSubgraphs" :key="idx" class="wf-select-item"
+                 @click="executeSelectedWorkflow(idx)">
+              工作流 {{ idx + 1 }}：{{ sg.nodes.size }} 个节点
+            </div>
+          </div>
+          <div class="wf-select-footer">
+            <button @click="showSelectWorkflowDialog = false">取消</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

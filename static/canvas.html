@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>万能画布</title>
   <script src="/static/vue.global.prod.js"></script>
-  <link rel="stylesheet" href="/static/canvas.css?v=22">
+  <link rel="stylesheet" href="/static/canvas.css?v=28">
 </head>
 <body>
   <div id="app">
@@ -252,76 +252,76 @@
                  height: Math.abs(marquee.canvasY - marquee.startY) + 'px'
                }"></div>
 
-          <!-- 悬浮工具栏（移入 canvas-transform 内，使用 canvas 坐标，始终跟随组件） -->
-          <div v-if="floatingToolbar.visible && floatingToolbarScreen" class="floating-toolbar"
-               :style="{ left: floatingToolbarScreen.left + 'px', top: floatingToolbarScreen.top + 'px' }"
-               @mousedown.stop @mouseup.stop="onFloatingToolbarMouseUp">
-            <!-- 单选-文本 -->
-            <template v-if="selectedIds.length === 1 && selectedCompType === 'text'">
-              <div class="toolbar-group">
-                <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextBold}" @click="toolbarSetBold" title="加粗"><b>B</b></button>
-                <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextItalic}" @click="toolbarSetItalic" title="斜体"><i>I</i></button>
-                <div class="toolbar-sep"></div>
-                <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextAlign === 'left'}" @click="toolbarSetAlign('left')" title="左对齐">⬅</button>
-                <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextAlign === 'center'}" @click="toolbarSetAlign('center')" title="居中">⬜</button>
-                <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextAlign === 'right'}" @click="toolbarSetAlign('right')" title="右对齐">➡</button>
-              </div>
+        </div>
+
+        <!-- 悬浮工具栏（在 canvas-area 层，和 canvas-transform 同级，使用屏幕坐标） -->
+        <div v-if="floatingToolbar.visible && floatingToolbarScreen" class="floating-toolbar"
+             :style="{ left: floatingToolbarScreen.left + 'px', top: floatingToolbarScreen.top + 'px' }"
+             @mousedown.stop @mouseup.stop="onFloatingToolbarMouseUp">
+          <!-- 单选-文本 -->
+          <template v-if="selectedIds.length === 1 && selectedCompType === 'text'">
+            <div class="toolbar-group">
+              <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextBold}" @click="toolbarSetBold" title="加粗"><b>B</b></button>
+              <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextItalic}" @click="toolbarSetItalic" title="斜体"><i>I</i></button>
               <div class="toolbar-sep"></div>
-              <div class="toolbar-group">
-                <span class="toolbar-label">色</span>
-                <input type="color" class="toolbar-color" :value="toolbarTextColor" @input="toolbarSetTextColor($event.target.value)" title="文字颜色">
-              </div>
-              <div class="toolbar-group">
-                <span class="toolbar-label">字</span>
-                <input type="number" class="toolbar-size" min="10" max="200" :value="toolbarTextFontSize" @input="toolbarSetFontSize($event.target.value)" title="字号">
-              </div>
-            </template>
-            <!-- 单选-矩形 -->
-            <template v-else-if="selectedIds.length === 1 && selectedCompType === 'rect'">
-              <div class="toolbar-group">
-                <span class="toolbar-label">背</span>
-                <input type="color" class="toolbar-color" :value="toolbarRectBg" @input="toolbarSetRectBg($event.target.value)" title="背景色">
-              </div>
-              <div class="toolbar-group">
-                <span class="toolbar-label">边</span>
-                <input type="color" class="toolbar-color" :value="toolbarRectBorder" @input="toolbarSetRectBorder($event.target.value)" title="边框颜色">
-              </div>
-              <div class="toolbar-sep"></div>
-              <div class="toolbar-group">
-                <span class="toolbar-label">圆</span>
-                <input type="number" class="toolbar-number" min="0" max="100"
-                       v-model.lazy="tmpRectRadius"
-                       @change="syncTmpRectRadius"
-                       title="圆角半径（像素）">
-              </div>
-            </template>
-            <!-- 单选-图片 -->
-            <template v-else-if="selectedIds.length === 1 && selectedCompType === 'image'">
-              <div class="toolbar-group">
-                <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarImageFlipH}" @click="toolbarFlipH" title="水平翻转">↔</button>
-                <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarImageFlipV}" @click="toolbarFlipV" title="垂直翻转">↕</button>
-              </div>
-            </template>
-            <!-- 多选：对齐工具 -->
-            <template v-else-if="selectedIds.length > 1">
-              <div class="toolbar-group">
-                <button class="toolbar-btn" @mousedown.prevent @click="toolbarAlignComps('h')" title="水平对齐">↕ 水平</button>
-                <button class="toolbar-btn" @mousedown.prevent @click="toolbarAlignComps('v')" title="垂直对齐">↔ 垂直</button>
-                <button class="toolbar-btn" @mousedown.prevent @click="toolbarDistributeComps('h')" title="水平分散">⫋</button>
-                <button class="toolbar-btn" @mousedown.prevent @click="toolbarDistributeComps('v')" title="垂直分散">⫌</button>
-              </div>
-            </template>
-            <!-- 通用按钮 -->
-            <div class="toolbar-group" v-if="selectedIds.length > 0">
-              <button class="toolbar-btn" @mousedown.prevent @click="toolbarBringFront" title="置顶">↑顶</button>
-              <button class="toolbar-btn" @mousedown.prevent @click="toolbarSendBack" title="置底">↓底</button>
-              <button class="toolbar-btn" @mousedown.prevent @click="toolbarDuplicate" title="复制">⧉</button>
-              <button class="toolbar-btn toolbar-btn-danger" @click="toolbarDelete" title="删除">🗑</button>
+              <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextAlign === 'left'}" @click="toolbarSetAlign('left')" title="左对齐">⬅</button>
+              <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextAlign === 'center'}" @click="toolbarSetAlign('center')" title="居中">⬜</button>
+              <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarTextAlign === 'right'}" @click="toolbarSetAlign('right')" title="右对齐">➡</button>
             </div>
+            <div class="toolbar-sep"></div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">色</span>
+              <input type="color" class="toolbar-color" :value="toolbarTextColor" @input="toolbarSetTextColor($event.target.value)" title="文字颜色">
+            </div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">字</span>
+              <input type="number" class="toolbar-size" min="10" max="200" :value="toolbarTextFontSize" @input="toolbarSetFontSize($event.target.value)" title="字号">
+            </div>
+          </template>
+          <!-- 单选-矩形 -->
+          <template v-else-if="selectedIds.length === 1 && selectedCompType === 'rect'">
+            <div class="toolbar-group">
+              <span class="toolbar-label">背</span>
+              <input type="color" class="toolbar-color" :value="toolbarRectBg" @input="toolbarSetRectBg($event.target.value)" title="背景色">
+            </div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">边</span>
+              <input type="color" class="toolbar-color" :value="toolbarRectBorder" @input="toolbarSetRectBorder($event.target.value)" title="边框颜色">
+            </div>
+            <div class="toolbar-sep"></div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">圆</span>
+              <input type="number" class="toolbar-number" min="0" max="100"
+                     v-model.lazy="tmpRectRadius"
+                     @change="syncTmpRectRadius"
+                     title="圆角半径（像素）">
+            </div>
+          </template>
+          <!-- 单选-图片 -->
+          <template v-else-if="selectedIds.length === 1 && selectedCompType === 'image'">
+            <div class="toolbar-group">
+              <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarImageFlipH}" @click="toolbarFlipH" title="水平翻转">↔</button>
+              <button class="toolbar-btn" @mousedown.prevent :class="{active: toolbarImageFlipV}" @click="toolbarFlipV" title="垂直翻转">↕</button>
+            </div>
+          </template>
+          <!-- 多选：对齐工具 -->
+          <template v-else-if="selectedIds.length > 1">
+            <div class="toolbar-group">
+              <button class="toolbar-btn" @mousedown.prevent @click="toolbarAlignComps('h')" title="水平对齐">↕ 水平</button>
+              <button class="toolbar-btn" @mousedown.prevent @click="toolbarAlignComps('v')" title="垂直对齐">↔ 垂直</button>
+              <button class="toolbar-btn" @mousedown.prevent @click="toolbarDistributeComps('h')" title="水平分散">⫋</button>
+              <button class="toolbar-btn" @mousedown.prevent @click="toolbarDistributeComps('v')" title="垂直分散">⫌</button>
+            </div>
+          </template>
+          <!-- 通用按钮 -->
+          <div class="toolbar-group" v-if="selectedIds.length > 0">
+            <button class="toolbar-btn" @mousedown.prevent @click="toolbarBringFront" title="置顶">↑顶</button>
+            <button class="toolbar-btn" @mousedown.prevent @click="toolbarSendBack" title="置底">↓底</button>
+            <button class="toolbar-btn" @mousedown.prevent @click="toolbarDuplicate" title="复制">⧉</button>
+            <button class="toolbar-btn toolbar-btn-danger" @click="toolbarDelete" title="删除">🗑</button>
           </div>
         </div>
 
-        <!-- 右键菜单 -->
         <div v-if="contextMenu.visible"
              class="context-menu"
              :style="{left: contextMenu.x + 'px', top: contextMenu.y + 'px'}">
@@ -362,6 +362,6 @@
   </div>
 
   <script src="/static/canvas-api.js"></script>
-  <script src="/static/canvas.js?v=22"></script>
+  <script src="/static/canvas.js?v=29"></script>
 </body>
 </html>

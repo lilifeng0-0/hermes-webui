@@ -66,10 +66,13 @@
         if (this.selectedIds.length === 1) {
           const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
           if (comp) {
-            // 工具栏现在在 .canvas-transform 内部（继承 transform: translate(-panX*zoom,-panY*zoom) scale(zoom)）
-            // 所以用 canvas 坐标直接定位，自动完成缩放
-            // 工具栏居中于组件顶部上方
-            return { left: comp.x + comp.width / 2 - 90, top: comp.y - 55 };
+            // 工具栏在 canvas-area 层用屏幕坐标，canvas-transform 的 transform: translate(-panX*zoom,-panY*zoom) scale(zoom) 反向推算
+            // screenX = zoom*(comp.x - panX) + comp.width/2 - 90
+            // screenY = zoom*(comp.y - panY) - 55
+            return {
+              left: this.zoom * (comp.x - this.panX) + this.zoom * comp.width / 2 - 90,
+              top: this.zoom * (comp.y - this.panY) - 55
+            };
           }
         }
         return {
@@ -569,8 +572,13 @@
           if (!this.componentStartPos || comp.locked) return;
           const dx = (ev.clientX - this.componentStartPos.x) / this.zoom;
           const dy = (ev.clientY - this.componentStartPos.y) / this.zoom;
-          comp.x = this.componentStartPos.compX + dx;
-          comp.y = this.componentStartPos.compY + dy;
+          // 用新对象替换触发 Vue 响应式更新
+          const idx = this.currentComponents.findIndex(c => c.id === comp.id);
+          if (idx !== -1) {
+            const updated = { ...this.currentComponents[idx], x: this.componentStartPos.compX + dx, y: this.componentStartPos.compY + dy };
+            this.canvas.canvases[this.canvas.activeCanvasId].components.splice(idx, 1, updated);
+            this.$forceUpdate(); // 强制刷新当前实例，驱动 SVG 连接线重算
+          }
         };
         const onUp = () => {
           if (this.componentStartPos) {
@@ -587,6 +595,70 @@
           window.removeEventListener('mousemove', onMove);
           window.removeEventListener('mouseup', onUp);
         };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      },
+
+      // ── 组件缩放 ─────────────────────────────────────────────────
+      onBorderEdgeDown(e, edge) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (this.selectedIds.length === 0) return;
+        const comp = this.currentComponents.find(c => c.id === this.selectedIds[0]);
+        if (!comp || comp.locked) return;
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const origX = comp.x;
+        const origY = comp.y;
+        const origW = comp.width;
+        const origH = comp.height;
+
+        const onMove = (ev) => {
+          const dx = (ev.clientX - startX) / this.zoom;
+          const dy = (ev.clientY - startY) / this.zoom;
+
+          if (edge === 'e') {
+            comp.width = Math.max(20, origW + dx);
+          } else if (edge === 'w') {
+            const newW = Math.max(20, origW - dx);
+            comp.x = origX + (origW - newW);
+            comp.width = newW;
+          } else if (edge === 's') {
+            comp.height = Math.max(20, origH + dy);
+          } else if (edge === 'n') {
+            const newH = Math.max(20, origH - dy);
+            comp.y = origY + (origH - newH);
+            comp.height = newH;
+          } else if (edge === 'ne') {
+            comp.width = Math.max(20, origW + dx);
+            const newH = Math.max(20, origH - dy);
+            comp.y = origY + (origH - newH);
+            comp.height = newH;
+          } else if (edge === 'nw') {
+            const newW = Math.max(20, origW - dx);
+            comp.x = origX + (origW - newW);
+            comp.width = newW;
+            const newH = Math.max(20, origH - dy);
+            comp.y = origY + (origH - newH);
+            comp.height = newH;
+          } else if (edge === 'se') {
+            comp.width = Math.max(20, origW + dx);
+            comp.height = Math.max(20, origH + dy);
+          } else if (edge === 'sw') {
+            const newW = Math.max(20, origW - dx);
+            comp.x = origX + (origW - newW);
+            comp.width = newW;
+            comp.height = Math.max(20, origH + dy);
+          }
+        };
+
+        const onUp = () => {
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+          this.scheduleAutoSave();
+        };
+
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
       },
@@ -1225,10 +1297,10 @@
         const toComp = this.currentComponents.find(c => c.id === conn.to);
         if (!fromComp || !toComp || !fromComp.width || !fromComp.height || !toComp.width || !toComp.height) return '';
 
-        // 自动选择最近的一对连接点（除非连接已指定端口）
+        // 自动选择最近的一对连接点（每次都重新计算，忽略保存的端口）
         const bestPorts = this._getBestPorts(fromComp, toComp);
-        const fromPort = conn.fromPort || bestPorts.from;
-        const toPort = conn.toPort || bestPorts.to;
+        const fromPort = bestPorts.from;
+        const toPort = bestPorts.to;
 
         // 获取连接点坐标
         const fromPos = this.getPortPosition(fromComp, fromPort);
@@ -1293,8 +1365,8 @@
         const toComp = this.currentComponents.find(c => c.id === conn.to);
         if (!fromComp || !toComp || !fromComp.width || !fromComp.height || !toComp.width || !toComp.height) return [];
         const bestPorts = this._getBestPorts(fromComp, toComp);
-        const fromPort = conn.fromPort || bestPorts.from;
-        const toPort = conn.toPort || bestPorts.to;
+        const fromPort = bestPorts.from;
+        const toPort = bestPorts.to;
         const fromPos = this.getPortPosition(fromComp, fromPort);
         const toPos = this.getPortPosition(toComp, toPort);
         return [
@@ -1381,6 +1453,75 @@
                   this.scheduleAutoSave();
                   this.showToast('连接已创建');
                 }
+              }
+            }
+          }
+          this.draggingConnection = null;
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      },
+
+      // ── 连接线端点拖拽重连 ─────────────────────────────────────
+      onConnPortMouseDown(e, conn, port) {
+        e.stopPropagation();
+        e.preventDefault();
+        // 找出这是 from 端还是 to 端
+        const fromComp = this.currentComponents.find(c => c.id === conn.from);
+        const isFrom = port.id.endsWith('-from');
+        const startCompId = isFrom ? conn.from : conn.to;
+        const startPort = isFrom ? conn.fromPort : conn.toPort;
+        const comp = this.currentComponents.find(c => c.id === startCompId);
+        if (!comp) return;
+
+        const area = document.getElementById('canvasArea').getBoundingClientRect();
+        const startX = (e.clientX - area.left) / this.zoom + this.panX;
+        const startY = (e.clientY - area.top) / this.zoom + this.panY;
+
+        // 复用 draggingConnection 状态来跟踪拖拽
+        this.draggingConnection = {
+          from: startCompId,
+          fromPort: startPort,
+          currentX: startX,
+          currentY: startY,
+          // 额外：记录原连接ID，以便完成重连时删除旧连接
+          originalConnId: conn.id,
+        };
+
+        const onMove = (ev) => {
+          if (!this.draggingConnection) return;
+          const mx = (ev.clientX - area.left) / this.zoom + this.panX;
+          const my = (ev.clientY - area.top) / this.zoom + this.panY;
+          this.draggingConnection.currentX = mx;
+          this.draggingConnection.currentY = my;
+        };
+
+        const onUp = (ev) => {
+          if (!this.draggingConnection) return;
+          const el = document.elementFromPoint(ev.clientX, ev.clientY);
+          const portEl = el ? el.closest('.comp-port') : null;
+          if (portEl) {
+            const targetCompEl = portEl.closest('.canvas-component');
+            if (targetCompEl) {
+              const targetCid = targetCompEl.getAttribute('data-comp-id');
+              if (targetCid && targetCid !== startCompId) {
+                this.pushUndo();
+                const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+                // 删除原连接
+                tab.connections = tab.connections.filter(c => c.id !== this.draggingConnection.originalConnId);
+                // 创建新连接
+                tab.connections.push({
+                  id: 'conn-' + Date.now(),
+                  from: startCompId,
+                  to: targetCid,
+                  fromPort: startPort,
+                  toPort: portEl.getAttribute('data-port'),
+                });
+                this.scheduleAutoSave();
+                this.showToast('连接已重连');
               }
             }
           }

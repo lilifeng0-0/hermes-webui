@@ -595,13 +595,14 @@ body {
   display: flex;
   gap: 8px;
   z-index: 1000;
-  pointer-events: all;
+  pointer-events: none; /* 不阻挡画布组件的事件穿透 */
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
   gap: 4px;
+  pointer-events: all; /* 恢复按钮可点击 */
 }
 
 .toolbar-btn {
@@ -612,25 +613,28 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
+  pointer-events: all;
 }
 
 .toolbar-btn:hover { background: var(--canvas-bg); }
 
-.toolbar-color { width: 28px; height: 28px; border: 1px solid var(--canvas-border); border-radius: 4px; cursor: pointer; }
+.toolbar-color { width: 28px; height: 28px; border: 1px solid var(--canvas-border); border-radius: 4px; cursor: pointer; pointer-events: all; }
 
-.toolbar-number { width: 48px; height: 28px; border: 1px solid var(--canvas-border); border-radius: 4px; font-size: 12px; text-align: center; }
+.toolbar-number { width: 48px; height: 28px; border: 1px solid var(--canvas-border); border-radius: 4px; font-size: 12px; text-align: center; pointer-events: all; }
 
 .toolbar-sep {
   width: 1px;
   height: 20px;
   background: var(--canvas-border);
   flex-shrink: 0;
+  pointer-events: none;
 }
 
 .toolbar-label {
   font-size: 11px;
   color: #888;
   margin-right: 2px;
+  pointer-events: none;
 }
 
 .toolbar-btn.active {

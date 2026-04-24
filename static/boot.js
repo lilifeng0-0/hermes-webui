@@ -639,8 +639,8 @@ function _setResolvedTheme(isDark){
   const link=document.getElementById('prism-theme');
   if(!link) return;
   const want=isDark
-    ?'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css'
-    :'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css';
+    ?'static/prism-tomorrow.min.css'
+    :'static/prism.min.css';
   if(link.href!==want){ link.href=want; }
 }
 

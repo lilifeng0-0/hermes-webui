@@ -69,7 +69,7 @@
             // 工具栏现在在 .canvas-transform 内部（继承 transform: translate(-panX*zoom,-panY*zoom) scale(zoom)）
             // 所以用 canvas 坐标直接定位，自动完成缩放
             // 工具栏居中于组件顶部上方
-            return { left: comp.x + comp.width / 2 - 190, top: comp.y - 55 };
+            return { left: comp.x + comp.width / 2 - 90, top: comp.y - 55 };
           }
         }
         return {

@@ -2,8 +2,9 @@
 (function() {
   'use strict';
 
-  // ── 并发控制 ──────────────────────────────────────────────
+  // ── 并发控制 & 停止机制 ──────────────────────────────────────
   const _runningWorkflows = new Set();
+  const _activeControllers = new Map();  // nodeId → AbortController
 
   // ── 规范化 canvas 数据 ────────────────────────────────────
   // 支持 { canvases: {[id]: {components, connections}}, activeCanvasId }
@@ -411,9 +412,22 @@
     const engine = resolveEngine(comp);
     const startTime = Date.now();
 
+    // 检查是否已被停止
+    const existingCtrl = _activeControllers.get(comp.id);
+    if (existingCtrl && existingCtrl.signal.aborted) {
+      throw new Error('workflow stopped');
+    }
+
     if (engine === 'hermes') {
       // 调用 Hermes Agent
-      const result = await window.CanvasAPI.executeWorkflow(comp.id, 'run', canvasId);
+      const ctrl = new AbortController();
+      _activeControllers.set(comp.id, ctrl);
+      let result;
+      try {
+        result = await window.CanvasAPI.executeWorkflow(comp.id, 'run', canvasId);
+      } finally {
+        _activeControllers.delete(comp.id);
+      }
       return {
         result: result.data || result,
         metadata: {
@@ -427,6 +441,21 @@
       // 内置运行时
       const input = applyInputMapping(comp, inputContext);
       return await runBuiltin(comp, input, inputContext);
+    }
+  }
+
+  // ── 停止工作流 ─────────────────────────────────────────────
+  // 通知后端终止指定节点的 running workflow
+  async function stopWorkflow(nodeId) {
+    const ctrl = _activeControllers.get(nodeId);
+    if (ctrl) {
+      ctrl.abort();
+      _activeControllers.delete(nodeId);
+    }
+    try {
+      await window.CanvasAPI.executeWorkflow(nodeId, 'stop');
+    } catch (e) {
+      // stop API 失败不影响前端状态清理
     }
   }
 
@@ -629,7 +658,8 @@
     passContext,
     shouldTraverse,
     handleLoop,
-    runWorkflow
+    runWorkflow,
+    stopWorkflow
   };
 
 })();

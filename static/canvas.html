@@ -396,6 +396,9 @@
             <div class="wf-log-result">{{ typeof log.result === 'object' ? JSON.stringify(log.result).slice(0,120) : log.result }}</div>
           </div>
         </div>
+        <div class="wf-log-footer">
+          <button v-if="workflowLogs.length > 0" class="wf-log-stop-btn" @click="stopWorkflow">■ 停止</button>
+        </div>
       </div>
 
       <!-- 多工作流选择弹窗 -->

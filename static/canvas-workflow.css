@@ -97,7 +97,25 @@
   overflow: hidden;
 }
 
-/* ── 多工作流选择弹窗 ───────────────────────────────────── */
+.wf-log-footer {
+  padding: 8px 14px;
+  border-top: 1px solid #333333;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.wf-log-stop-btn {
+  background: #3b1f1f;
+  border: 1px solid #c0392b;
+  color: #ff6b6b;
+  padding: 5px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.wf-log-stop-btn:hover { background: #4a2828; }
 .workflow-select-overlay {
   position: fixed;
   inset: 0;

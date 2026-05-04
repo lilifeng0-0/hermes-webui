@@ -1729,10 +1729,21 @@
 
       // ── 工作流 ─────────────────────────────────────────────────
       openWorkflowPanel(nodeId) {
-        this.workflowPanel = { visible: true, nodeId, x: 300, y: 200 };
+        this.workflowPanel = { visible: true, nodeId: nodeId || this.selectedIds[0] || null, x: 300, y: 200 };
       },
       closeWorkflowPanel() {
         this.workflowPanel.visible = false;
+      },
+      async stopWorkflow() {
+        if (!window.CanvasWorkflow) return;
+        const nodeId = this.workflowPanel.nodeId;
+        if (nodeId) {
+          await window.CanvasWorkflow.stopWorkflow(nodeId);
+        }
+        this.workflowLogs = this.workflowLogs.map(log => ({
+          ...log,
+          metadata: { ...log.metadata, stopped: true }
+        }));
       },
       async executeWorkflowNode(nodeId) {
         if (!window.CanvasWorkflow) {

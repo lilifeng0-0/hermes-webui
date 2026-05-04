@@ -6,37 +6,24 @@ import json
 import time
 import urllib.request
 import urllib.error
+from pathlib import Path
 from typing import Any, Dict, Optional
 
-_API_DIR = Path(__file__).parent.resolve()
-_BASE_URL = 'http://localhost:8787'
 _TIMEOUT = 60  # 秒
 
 
 def _call_hermes(prompt: str, model: str = 'default', max_tokens: int = 2000) -> Dict[str, Any]:
-    """调用 Hermes Agent Chat API（同步版本）"""
-    payload = json.dumps({
-        'model': model,
-        'messages': [{'role': 'user', 'content': prompt}],
-        'max_tokens': max_tokens
-    }).encode('utf-8')
+    """Mock Hermes call for local testing.
 
-    req = urllib.request.Request(
-        f'{_BASE_URL}/api/chat/completions',
-        data=payload,
-        headers={'Content-Type': 'application/json'},
-        method='POST'
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-            data = json.loads(resp.read())
-            content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-            return {'result': content}
-    except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', errors='replace')
-        return {'error': f'HTTP {e.code}: {body}'}
-    except Exception as e:
-        return {'error': str(e)}
+    在单机测试环境下，模拟 Hermes Agent 返回，避免死锁。
+    TODO: 生产环境替换为真正的 Agent 调用（subprocess + hermes CLI）。
+    """
+    import time
+    time.sleep(0.5)  # 模拟延迟
+    return {
+        'result': f'[Mock] 已处理请求: {prompt[:50]}...',
+        'metadata': {'engine': 'mock', 'model': model}
+    }
 
 
 def execute_skill(skill_name: str, params: Dict[str, Any], input_data: Any = None) -> Dict[str, Any]:

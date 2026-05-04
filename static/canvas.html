@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>万能画布</title>
   <script src="/static/vue.global.prod.js"></script>
-  <link rel="stylesheet" href="/static/canvas.css?v=29">
+  <link rel="stylesheet" href="/static/canvas.css?v=32">
   <link rel="stylesheet" href="/static/canvas-workflow.css">
 </head>
 <body>
@@ -165,7 +165,7 @@
           <!-- 组件渲染 -->
           <div v-for="comp in currentComponents" :key="comp.id"
                class="canvas-component"
-               :class="['comp-' + comp.type, {selected: selectedIds.includes(comp.id), locked: comp.locked, 'is-dragging': isDraggingComps && selectedIds.includes(comp.id)}]"
+               :class="['comp-' + comp.type, 'status-' + (comp.data?.status || 'idle'), {selected: selectedIds.includes(comp.id), locked: comp.locked, 'is-dragging': isDraggingComps && selectedIds.includes(comp.id)}]"
                :style="getComponentStyle(comp)"
                :data-comp-id="comp.id"
                @mousedown.stop="onComponentMouseDown($event, comp)">
@@ -325,9 +325,24 @@
 
         <div v-if="contextMenu.visible"
              class="context-menu"
-             :style="{left: contextMenu.x + 'px', top: contextMenu.y + 'px'}">
+             :style="{left: contextMenu.x + 'px', top: contextMenu.y + 'px'}"
+             @mouseleave="closeSubmenus">
           <template v-for="(item, idx) in contextMenu.items" :key="idx">
             <div v-if="item.divider" class="context-menu-divider"></div>
+            <div v-else-if="item.submenu"
+                 class="context-menu-item has-submenu"
+                 @mouseenter="activeSubmenu = idx">
+              {{ item.label }} <span class="submenu-arrow">▶</span>
+              <div v-if="activeSubmenu === idx" class="context-submenu"
+                   :style="{left: '100%', top: '0'}">
+                <div v-for="(sub, si) in item.submenu" :key="si"
+                     class="context-menu-item"
+                     :class="{disabled: sub.disabled}"
+                     @click="sub.disabled || sub.action()">
+                  {{ sub.label }}
+                </div>
+              </div>
+            </div>
             <div v-else class="context-menu-item"
                  :class="{disabled: item.disabled}"
                  @click="item.disabled || item.action()">
@@ -402,7 +417,7 @@
   </div>
 
   <script src="/static/canvas-api.js"></script>
-  <script src="/static/canvas.js?v=29"></script>
+  <script src="/static/canvas.js?v=32"></script>
   <script src="/static/canvas-workflow.js"></script>
 </body>
 </html>

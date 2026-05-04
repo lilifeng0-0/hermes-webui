@@ -407,13 +407,13 @@
   }
 
   // ── 执行单个组件 ────────────────────────────────────────────
-  async function executeComponent(comp, inputContext) {
+  async function executeComponent(comp, inputContext, canvasId) {
     const engine = resolveEngine(comp);
     const startTime = Date.now();
 
     if (engine === 'hermes') {
       // 调用 Hermes Agent
-      const result = await window.CanvasAPI.executeWorkflow(comp.id, 'run', canvas.id);
+      const result = await window.CanvasAPI.executeWorkflow(comp.id, 'run', canvasId);
       return {
         result: result.data || result,
         metadata: {
@@ -479,9 +479,12 @@
   }
 
   // ── 主执行函数 ─────────────────────────────────────────────
-  // canvas: 画布数据，可以是 { canvases: {[id]: {components, connections}}, activeCanvasId }
+  // canvas: 画布数据，可以是 { id, canvases: {[id]: {components, connections}}, activeCanvasId }
   //         也可以是直接的 { components, connections } 结构
   async function runWorkflow(canvas, targetId) {
+    // 保存 canvasId（规范化前）
+    const canvasId = canvas.id || canvas.activeCanvasId || null;
+
     // 规范化 canvas 数据（支持嵌套结构或直接结构）
     if (canvas.canvases && canvas.activeCanvasId) {
       const tab = canvas.canvases[canvas.activeCanvasId];
@@ -568,15 +571,18 @@
         const result = await handleLoop(
           { from: incomingEdges[0]?.from, to: nodeId },
           upstreamContext,
-          async (conn, ctx) => await executeComponent(comp, ctx)
+          async (conn, ctx) => await executeComponent(comp, ctx, canvasId)
         );
 
         contextMap.set(nodeId, result);
         updateComponentStatus(nodeId, 'completed', 100, result);
 
         results.push({
+          compId: nodeId,
           nodeId,
-          result
+          result: result.result,
+          metadata: result.metadata,
+          context: result.context
         });
 
         // 向下游传递上下文
@@ -589,8 +595,10 @@
       } catch (error) {
         updateComponentStatus(nodeId, 'failed', 0, { error: error.message });
         results.push({
+          compId: nodeId,
           nodeId,
-          error: error.message
+          result: null,
+          metadata: { engine: 'unknown', type: comp.type, duration: Date.now() - startTime, error: error.message }
         });
       }
     }

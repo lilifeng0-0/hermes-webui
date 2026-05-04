@@ -74,15 +74,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         self._req_t0 = time.time()
+        import sys
+        sys.stderr.write(f'[do_POST] path={self.path}\n')
+        sys.stderr.flush()
         try:
             parsed = urlparse(self.path)
             if not check_auth(self, parsed): return
+            sys.stderr.write('[do_POST] auth passed\n')
+            sys.stderr.flush()
             result = handle_post(self, parsed)
+            sys.stderr.write(f'[do_POST] handle_post result={result}\n')
+            sys.stderr.flush()
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)
         except Exception as e:
-            print(f'[webui] ERROR {self.command} {self.path}\n' + traceback.format_exc(), flush=True)
-            return j(self, {'error': 'Internal server error'}, status=500)
+            sys.stderr.write(f'[do_POST] exception: {e}\n')
+            sys.stderr.flush()
+            return j(self, {'error': str(e)}, status=500)
 
     def do_PUT(self) -> None:
         self._req_t0 = time.time()

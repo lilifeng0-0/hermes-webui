@@ -1,9 +1,10 @@
 /* ── 组件工作流状态边框 ───────────────────────────────────── */
-.canvas-component.status-idle    { box-shadow: inset 0 0 0 2px #666; }
-.canvas-component.status-queued   { box-shadow: inset 0 0 0 2px #888; }
-.canvas-component.status-running  { box-shadow: inset 0 0 0 2px #4a6fa5; }
-.canvas-component.status-success { box-shadow: inset 0 0 0 2px #38a169; }
-.canvas-component.status-failed   { box-shadow: inset 0 0 0 2px #e53e3e; }
+.canvas-component.status-idle      { box-shadow: inset 0 0 0 2px #666; }
+.canvas-component.status-queued     { box-shadow: inset 0 0 0 2px #888; }
+.canvas-component.status-running    { box-shadow: inset 0 0 0 2px #4a6fa5; }
+.canvas-component.status-completed  { box-shadow: inset 0 0 0 2px #38a169; }
+.canvas-component.status-success    { box-shadow: inset 0 0 0 2px #38a169; }
+.canvas-component.status-failed     { box-shadow: inset 0 0 0 2px #e53e3e; }
 
 /* 运行时组件呼吸动画 */
 .canvas-component.status-running {

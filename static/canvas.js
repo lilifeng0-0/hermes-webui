@@ -40,6 +40,7 @@
         redoStack: [],
         maxUndoSteps: 50,
         contextMenu: { visible: false, x: 0, y: 0, items: [] },
+        activeSubmenu: null,
         draggingConnection: null, // {from, fromPort, currentX, currentY}
         toast: { visible: false, message: '' },
         floatingToolbar: { visible: false, mouseDownX: 0, mouseDownY: 0 },
@@ -415,6 +416,9 @@
       cancelHideZoomMenu() {
         if (this._zoomHideTimer) { clearTimeout(this._zoomHideTimer); this._zoomHideTimer = null; }
       },
+      closeSubmenus() {
+        this.activeSubmenu = null;
+      },
 
       // 全局鼠标事件（平移画布时使用，避免鼠标移出区域后事件中断）
       _onDocMouseMove(e) {
@@ -472,6 +476,7 @@
         } else if (e.key === 'Escape') {
           this.selectedIds = [];
           this.contextMenu.visible = false;
+          this.activeSubmenu = null;
           this.showSkillsDropdown = false;
         }
       },
@@ -690,7 +695,7 @@
         const items = this.buildContextMenuItems(comps, e);
         this.contextMenu = { visible: true, x: e.clientX, y: e.clientY, items };
       },
-      hideContextMenu() { this.contextMenu.visible = false; },
+      hideContextMenu() { this.contextMenu.visible = false; this.activeSubmenu = null; },
 
       // ── Floating Toolbar ──────────────────────────────────────────────────
       onFloatingToolbarMouseUp(e) {
@@ -937,7 +942,7 @@
             { divider: true },
             { label: '▶ 执行此工作流', action: () => this.executeWorkflowNode(comp.id) },
             { label: '📋 工作流日志', action: () => this.openWorkflowPanel(comp.id) },
-            { label: '---' },
+            { divider: true },
             { label: '触发模式', submenu: [
                 { label: '手动 (manual)', action: () => this.setTriggerMode(comp.id, 'manual') },
                 { label: '自动 (auto)', action: () => this.setTriggerMode(comp.id, 'auto') },
@@ -1742,13 +1747,15 @@
           this.showSelectWorkflowDialog = true;
           return;
         }
-        const results = await window.CanvasWorkflow.runWorkflow(tab, nodeId);
+        // 传入 { ...tab, id: this.canvas.id } 以保留 canvasId
+        const canvasData = { ...tab, id: this.canvas.id };
+        const results = await window.CanvasWorkflow.runWorkflow(canvasData, nodeId);
         if (results?.success === false) {
           this.showToast(results.error || '执行失败');
           return;
         }
-        this.workflowLogs = results || [];
-        this.sendWorkflowToChat(results || []);
+        this.workflowLogs = results?.results || [];
+        this.sendWorkflowToChat(results?.results || []);
       },
       async executeSelectedWorkflow(subgraphIndex) {
         this.showSelectWorkflowDialog = false;
@@ -1756,9 +1763,10 @@
         if (!subgraph || !subgraph.nodes.size) return;
         const nodeId = [...subgraph.nodes][0];
         const tab = this.canvas?.canvases?.[this.canvas?.activeCanvasId];
-        const results = await window.CanvasWorkflow.runWorkflow(tab, nodeId);
-        this.workflowLogs = results || [];
-        this.sendWorkflowToChat(results || []);
+        const canvasData = { ...tab, id: this.canvas.id };
+        const results = await window.CanvasWorkflow.runWorkflow(canvasData, nodeId);
+        this.workflowLogs = results?.results || [];
+        this.sendWorkflowToChat(results?.results || []);
       },
       sendWorkflowToChat(results) {
         if (!results || results.length === 0) return;

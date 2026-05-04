@@ -1,5 +1,5 @@
 // 画布 API 调用封装
-const CanvasAPI = {
+window.CanvasAPI = {
   list() {
     return fetch('/api/canvas').then(r => r.json());
   },

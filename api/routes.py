@@ -2285,7 +2285,6 @@ def handle_post(handler, parsed) -> bool:
     # ── Workflow execution (POST) ──
     if parsed.path == "/api/workflow/execute":
         try:
-            body = read_body(handler)
             node_id = body.get("node_id")
             if not node_id:
                 return j(handler, {"error": "node_id is required"}, status=400)

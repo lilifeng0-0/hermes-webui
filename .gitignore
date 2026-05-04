@@ -28,6 +28,9 @@ copilot-instructions.md
 screenshot-*.png
 full-UI.png
 
+# User canvas data (runtime storage, never commit)
+temp/
+
 # OS files
 .DS_Store
 Thumbs.db

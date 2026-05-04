@@ -12,7 +12,7 @@ import urllib.error
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-_TIMEOUT = 60  # 秒
+_TIMEOUT = 180  # 秒 — subprocess communicate 超时（要大于 hermes 自己的超时）
 
 # 正在运行的 workflow 进程追踪: {node_id: {'proc': Popen, 'start_time': float}}
 _runningWorkflows: Dict[str, Dict[str, Any]] = {}
@@ -283,5 +283,5 @@ def _get_fallback_config(node_id: str) -> Dict[str, Any]:
         'engine': 'hermes',
         'builtinType': 'transform',
         'input': None,
-        'prompt': f'处理节点 {node_id}',
+        'prompt': f'你是一个文本处理器。请简洁回复：收到输入 "{node_id}"，直接返回一句话说明已接收。',
     }

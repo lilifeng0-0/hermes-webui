@@ -321,19 +321,23 @@ body {
   stroke-width: 2.5;
   stroke-linecap: round;
 }
+/* 前半段：从起点缩小到中点（向右/下收缩） */
 .conn-half-fwd {
+  transform-origin: left center;
   animation: conn-shrink-fwd 0.3s ease-in forwards;
 }
+/* 后半段：从终点缩小到中点（向左/上收缩） */
 .conn-half-rev {
+  transform-origin: right center;
   animation: conn-shrink-rev 0.3s ease-in forwards;
 }
 @keyframes conn-shrink-fwd {
-  from { stroke-dasharray: 2000; stroke-dashoffset: 0; }
-  to   { stroke-dasharray: 2000; stroke-dashoffset: 2000; }
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
 }
 @keyframes conn-shrink-rev {
-  from { stroke-dasharray: 2000; stroke-dashoffset: 0; }
-  to   { stroke-dasharray: 2000; stroke-dashoffset: 2000; }
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
 }
 
 /* 连接线 hover 发光效果 */

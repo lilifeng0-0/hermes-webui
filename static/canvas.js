@@ -1444,6 +1444,31 @@
         return `M ${mx} ${my} C ${mid_cp2x} ${mid_cp2y}, ${cp2x} ${cp2y}, ${toPos.x} ${toPos.y}`;
       },
 
+      // 删除动画用：获取连接线曲线的中点坐标（用于 transform-origin）
+      getConnectionMidpoint(conn) {
+        const fromComp = this.currentComponents.find(c => c.id === conn.from);
+        const toComp = this.currentComponents.find(c => c.id === conn.to);
+        if (!fromComp || !toComp || !fromComp.width || !toComp.height || !toComp.width || !toComp.height) return { x: 0, y: 0 };
+        const bestPorts = this._getBestPorts(fromComp, toComp);
+        const fromPos = this.getPortPosition(fromComp, bestPorts.from);
+        const toPos = this.getPortPosition(toComp, bestPorts.to);
+        const dx = toPos.x - fromPos.x, dy = toPos.y - fromPos.y;
+        const absDx = Math.abs(dx), absDy = Math.abs(dy);
+        let cp1x, cp1y, cp2x, cp2y;
+        if (absDx > absDy) {
+          const offset = Math.max(50, absDx * 0.4);
+          cp1x = fromPos.x + (bestPorts.from === 'right' ? offset : -offset); cp1y = fromPos.y;
+          cp2x = toPos.x + (bestPorts.to === 'left' ? -offset : offset); cp2y = toPos.y;
+        } else {
+          const offset = Math.max(50, absDy * 0.4);
+          cp1x = fromPos.x; cp1y = fromPos.y + (bestPorts.from === 'bottom' ? offset : -offset);
+          cp2x = toPos.x; cp2y = toPos.y + (bestPorts.to === 'top' ? -offset : offset);
+        }
+        const mx = 0.125*fromPos.x + 0.375*cp1x + 0.375*cp2x + 0.125*toPos.x;
+        const my = 0.125*fromPos.y + 0.375*cp1y + 0.375*cp2y + 0.125*toPos.y;
+        return { x: mx, y: my };
+      },
+
       getPortPosition(comp, port) {
         const cx = comp.x + comp.width / 2;
         const cy = comp.y + comp.height / 2;

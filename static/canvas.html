@@ -125,7 +125,8 @@
            @drop="onCanvasDrop">
         <div class="canvas-transform" :style="transformStyle">
           <!-- SVG连接线层 -->
-          <svg class="connections-layer" :style="{width: canvasAreaWidth + 'px', height: canvasAreaHeight + 'px'}">
+          <svg class="connections-layer"
+               :style="{width: canvasAreaWidth + 'px', height: canvasAreaHeight + 'px'}">
             <defs>
               <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto-start-reverse">
                 <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
@@ -136,30 +137,17 @@
             </defs>
             <g v-for="conn in currentConnections" :key="conn.id"
                :class="{hovered: hoveredConnId === conn.id, 'conn-deleting': deletingConnId === conn.id}"
-               style="cursor: pointer;"
-               @click.stop="onConnectionClick(conn)"
-               @contextmenu.prevent.stop="onConnectionContextMenu($event, conn)">
+               style="cursor: pointer;">
               <!-- 透明粗线条扩大命中区域（不影响视觉） -->
               <path :d="getConnectionPath(conn)"
                     fill="none" stroke="transparent" stroke-width="12"
                     style="pointer-events: stroke;"
                     @mouseenter="onConnectionHover(conn)"
                     @mouseleave="onConnectionLeave(conn)" />
-              <!-- 可见连接线 -->
-              <path v-if="deletingConnId !== conn.id" :d="getConnectionPath(conn)" class="connection-path"
-                    :class="{selected: selectedIds.includes(conn.id + '-conn')}"
-                    @mouseenter="onConnectionHover(conn)"
-                    @mouseleave="onConnectionLeave(conn)"
+              <!-- 可见连接线（带淡出动画） -->
+              <path :d="getConnectionPath(conn)" class="connection-path"
+                    :class="{selected: selectedIds.includes(conn.id + '-conn'), 'conn-fading': deletingConnId === conn.id}"
                     marker-end="url(#arrowhead)" />
-              <!-- 删除动画：两端向中间收缩消失 -->
-              <template v-else>
-                <g :transform="'translate(' + getConnectionMidpoint(conn).x + ',' + getConnectionMidpoint(conn).y + ')'">
-                  <path :d="getConnectionHalfForward(conn)" class="conn-half conn-half-fwd"
-                        @mouseenter="onConnectionHover(conn)" @mouseleave="onConnectionLeave(conn)" />
-                  <path :d="getConnectionHalfReverse(conn)" class="conn-half conn-half-rev"
-                        @mouseenter="onConnectionHover(conn)" @mouseleave="onConnectionLeave(conn)" />
-                </g>
-              </template>
               <circle v-for="port in getConnectionPorts(conn)" :key="port.id"
                       :cx="port.cx" :cy="port.cy" r="5" fill="#4a90d9"
                       style="pointer-events:all;cursor:crosshair"

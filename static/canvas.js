@@ -561,7 +561,24 @@
         }
       },
       onCanvasClick(e) {
-        if (e.target.id === 'canvasArea' || e.target.classList.contains('canvas-transform')) {
+        if (e.target.id === 'canvasArea' || e.target.classList.contains('canvas-transform') || e.target.tagName === 'svg') {
+          // 检查是否点击在连接线上（优先用 hover 状态，其次数学检测）
+          const hitConn = this.hoveredConnId
+            ? this.currentConnections.find(c => c.id === this.hoveredConnId)
+            : null;
+          if (hitConn) {
+            this.onConnectionClick(hitConn);
+            return;
+          }
+          // fallback：数学检测
+          const area = document.getElementById('canvasArea').getBoundingClientRect();
+          const clickX = (e.clientX - area.left) / this.zoom + this.panX;
+          const clickY = (e.clientY - area.top) / this.zoom + this.panY;
+          const mathHit = this.findConnectionAtPoint(clickX, clickY);
+          if (mathHit) {
+            this.onConnectionClick(mathHit);
+            return;
+          }
           if (this.tool === 'text') {
             const area = document.getElementById('canvasArea').getBoundingClientRect();
             const x = (e.clientX - area.left) / this.zoom + this.panX;
@@ -574,6 +591,76 @@
           }
           this._componentJustSelected = false;
           this._marqueeJustPerformed = false;
+        }
+      },
+
+      // 查找指定画布坐标点是否落在某条连接线上（带容差）
+      findConnectionAtPoint(x, y, tolerance = 8) {
+        for (const conn of this.currentConnections) {
+          const fromComp = this.currentComponents.find(c => c.id === conn.from);
+          const toComp = this.currentComponents.find(c => c.id === conn.to);
+          if (!fromComp || !toComp) continue;
+          const bestPorts = this._getBestPorts(fromComp, toComp);
+          const p1 = this.getPortPosition(fromComp, bestPorts.from);
+          const p2 = this.getPortPosition(toComp, bestPorts.to);
+          const dx = p2.x - p1.x, dy = p2.y - p1.y;
+          const absDx = Math.abs(dx), absDy = Math.abs(dy);
+          let cp1, cp2;
+          if (absDx > absDy) {
+            const offset = Math.max(50, absDx * 0.4);
+            cp1 = { x: p1.x + (bestPorts.from === 'right' ? offset : -offset), y: p1.y };
+            cp2 = { x: p2.x + (bestPorts.to === 'left' ? -offset : offset), y: p2.y };
+          } else {
+            const offset = Math.max(50, absDy * 0.4);
+            cp1 = { x: p1.x, y: p1.y + (bestPorts.from === 'bottom' ? offset : -offset) };
+            cp2 = { x: p2.x, y: p2.y + (bestPorts.to === 'top' ? -offset : offset) };
+          }
+          if (this.distToCubicBezier(x, y, p1, cp1, cp2, p2) < tolerance) {
+            return conn;
+          }
+        }
+        return null;
+      },
+
+      // 计算点到三次贝塞尔曲线的最小距离
+      distToCubicBezier(x, y, p0, p1, p2, p3, samples = 20) {
+        let minDist = Infinity;
+        for (let i = 0; i <= samples; i++) {
+          const t = i / samples;
+          const bx = this.cubicBezierPt(t, p0.x, p1.x, p2.x, p3.x);
+          const by = this.cubicBezierPt(t, p0.y, p1.y, p2.y, p3.y);
+          const d = Math.hypot(x - bx, y - by);
+          if (d < minDist) minDist = d;
+        }
+        return minDist;
+      },
+
+      cubicBezierPt(t, p0, p1, p2, p3) {
+        const u = 1 - t;
+        return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3;
+      },
+
+      // SVG 连接线点击处理：用 elementFromPoint 判断点的是哪条连接线
+      onSvgConnClick(e) {
+        const svg = e.target;
+        if (svg.tagName !== 'svg' || !svg.classList.contains('connections-layer')) return;
+        // iframe 内需要用 iframe 的 document
+        const doc = svg.ownerDocument;
+        const hit = doc.elementFromPoint(e.clientX, e.clientY);
+        if (!hit || hit === svg) return;
+        // 找到 hit 元素所在的 connection 组
+        const g = hit.closest ? hit.closest('g[style*="cursor: pointer"]') : null;
+        if (!g) return;
+        const paths = g.querySelectorAll('path.connection-path');
+        if (!paths.length || !paths[0].getAttribute('d')) return;
+        const connPathD = paths[0].getAttribute('d');
+        const conn = this.currentConnections.find(c => this.getConnectionPath(c) === connPathD);
+        if (!conn) return;
+        e.stopPropagation();
+        if (e.type === 'contextmenu') {
+          this.onConnectionContextMenu(e, conn);
+        } else {
+          this.onConnectionClick(conn);
         }
       },
 
@@ -693,6 +780,25 @@
       // ── 右键菜单 ─────────────────────────────────────────────────
       onContextMenu(e) {
         e.preventDefault();
+        // 检查是否右键点击在连接线上（优先用 hover 状态，其次数学检测）
+        const hitConn = this.hoveredConnId
+          ? this.currentConnections.find(c => c.id === this.hoveredConnId)
+          : null;
+        if (hitConn) {
+          this.selectedIds = [hitConn.id + '-conn'];
+          this.onConnectionContextMenu(e, hitConn);
+          return;
+        }
+        // fallback：数学检测
+        const area = document.getElementById('canvasArea').getBoundingClientRect();
+        const clickX = (e.clientX - area.left) / this.zoom + this.panX;
+        const clickY = (e.clientY - area.top) / this.zoom + this.panY;
+        const mathHit = this.findConnectionAtPoint(clickX, clickY);
+        if (mathHit) {
+          this.selectedIds = [mathHit.id + '-conn'];
+          this.onConnectionContextMenu(e, mathHit);
+          return;
+        }
         const comps = this.selectedIds.map(id => this.currentComponents.find(c => c.id === id)).filter(Boolean);
         const items = this.buildContextMenuItems(comps, e);
         this.contextMenu = { visible: true, x: e.clientX, y: e.clientY, items };
@@ -1111,9 +1217,13 @@
         const tab = this.canvas.canvases[this.canvas.activeCanvasId];
         if (!tab) return;
         tab.components = tab.components.filter(c => !this.selectedIds.includes(c.id));
-        tab.connections = tab.connections.filter(conn =>
-          !this.selectedIds.includes(conn.from) && !this.selectedIds.includes(conn.to)
-        );
+        tab.connections = tab.connections.filter(conn => {
+          if (this.selectedIds.includes(conn.id + '-conn')) {
+            this.deleteConnection(conn.id);
+            return false;
+          }
+          return !this.selectedIds.includes(conn.from) && !this.selectedIds.includes(conn.to);
+        });
         this.selectedIds = [];
         this.scheduleAutoSave();
       },

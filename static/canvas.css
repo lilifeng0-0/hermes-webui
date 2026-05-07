@@ -287,6 +287,16 @@ body {
   overflow: visible;
 }
 
+/* SVG 本身可点击（用于统一处理连接线点击） */
+.connections-layer.connections-clickable {
+  pointer-events: all;
+}
+
+/* 让 hit area path 可点击 */
+.connections-layer path.hit-area {
+  pointer-events: stroke;
+}
+
 .connection-path {
   fill: none;
   stroke: #666;
@@ -315,31 +325,14 @@ body {
 .conn-deleting {
   pointer-events: none;
 }
-.conn-half {
-  fill: none;
-  stroke: #ff4444;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  /* transform-box 使 transform-origin 相对于路径自身 bounding box */
-  transform-box: fill-box;
+/* 删除动画：像泡沫一样淡出消失 */
+.conn-fading {
+  animation: conn-fade-out 0.35s ease-out forwards;
 }
-/* 前半段：从起点缩小到中点 */
-.conn-half-fwd {
-  transform-origin: left center;
-  animation: conn-shrink-fwd 0.3s ease-in forwards;
-}
-/* 后半段：从终点缩小到中点 */
-.conn-half-rev {
-  transform-origin: right center;
-  animation: conn-shrink-rev 0.3s ease-in forwards;
-}
-@keyframes conn-shrink-fwd {
-  from { transform: scaleX(1); opacity: 1; }
-  to   { transform: scaleX(0); opacity: 0; }
-}
-@keyframes conn-shrink-rev {
-  from { transform: scaleX(1); opacity: 1; }
-  to   { transform: scaleX(0); opacity: 0; }
+@keyframes conn-fade-out {
+  0%   { opacity: 1; }
+  40%  { opacity: 0.6; stroke-width: 3; }
+  100% { opacity: 0; stroke-width: 0.5; }
 }
 
 /* 连接线 hover 发光效果 */

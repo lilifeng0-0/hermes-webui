@@ -1389,6 +1389,61 @@
         return `M ${fromPos.x} ${fromPos.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${toPos.x} ${toPos.y}`;
       },
 
+      // 删除动画用：从起点到曲线中点的半段
+      getConnectionHalfForward(conn) {
+        const fromComp = this.currentComponents.find(c => c.id === conn.from);
+        const toComp = this.currentComponents.find(c => c.id === conn.to);
+        if (!fromComp || !toComp || !fromComp.width || !fromComp.height || !toComp.width || !toComp.height) return '';
+        const bestPorts = this._getBestPorts(fromComp, toComp);
+        const fromPos = this.getPortPosition(fromComp, bestPorts.from);
+        const toPos = this.getPortPosition(toComp, bestPorts.to);
+        const dx = toPos.x - fromPos.x, dy = toPos.y - fromPos.y;
+        const absDx = Math.abs(dx), absDy = Math.abs(dy);
+        let cp1x, cp1y, cp2x, cp2y;
+        if (absDx > absDy) {
+          const offset = Math.max(50, absDx * 0.4);
+          cp1x = fromPos.x + (bestPorts.from === 'right' ? offset : -offset); cp1y = fromPos.y;
+          cp2x = toPos.x + (bestPorts.to === 'left' ? -offset : offset); cp2y = toPos.y;
+        } else {
+          const offset = Math.max(50, absDy * 0.4);
+          cp1x = fromPos.x; cp1y = fromPos.y + (bestPorts.from === 'bottom' ? offset : -offset);
+          cp2x = toPos.x; cp2y = toPos.y + (bestPorts.to === 'top' ? -offset : offset);
+        }
+        // 中点 t=0.5
+        const mx = 0.125*fromPos.x + 0.375*cp1x + 0.375*cp2x + 0.125*toPos.x;
+        const my = 0.125*fromPos.y + 0.375*cp1y + 0.375*cp2y + 0.125*toPos.y;
+        // 第一段控制点：P0=P0, P1=cp1, P2=中点, P3=中点
+        const mid_cp1x = 0.5*cp1x + 0.5*mx, mid_cp1y = 0.5*cp1y + 0.5*my;
+        return `M ${fromPos.x} ${fromPos.y} C ${cp1x} ${cp1y}, ${mid_cp1x} ${mid_cp1y}, ${mx} ${my}`;
+      },
+
+      // 删除动画用：从曲线中点到终点的半段
+      getConnectionHalfReverse(conn) {
+        const fromComp = this.currentComponents.find(c => c.id === conn.from);
+        const toComp = this.currentComponents.find(c => c.id === conn.to);
+        if (!fromComp || !toComp || !fromComp.width || !toComp.height) return '';
+        const bestPorts = this._getBestPorts(fromComp, toComp);
+        const fromPos = this.getPortPosition(fromComp, bestPorts.from);
+        const toPos = this.getPortPosition(toComp, bestPorts.to);
+        const dx = toPos.x - fromPos.x, dy = toPos.y - fromPos.y;
+        const absDx = Math.abs(dx), absDy = Math.abs(dy);
+        let cp1x, cp1y, cp2x, cp2y;
+        if (absDx > absDy) {
+          const offset = Math.max(50, absDx * 0.4);
+          cp1x = fromPos.x + (bestPorts.from === 'right' ? offset : -offset); cp1y = fromPos.y;
+          cp2x = toPos.x + (bestPorts.to === 'left' ? -offset : offset); cp2y = toPos.y;
+        } else {
+          const offset = Math.max(50, absDy * 0.4);
+          cp1x = fromPos.x; cp1y = fromPos.y + (bestPorts.from === 'bottom' ? offset : -offset);
+          cp2x = toPos.x; cp2y = toPos.y + (bestPorts.to === 'top' ? -offset : offset);
+        }
+        const mx = 0.125*fromPos.x + 0.375*cp1x + 0.375*cp2x + 0.125*toPos.x;
+        const my = 0.125*fromPos.y + 0.375*cp1y + 0.375*cp2y + 0.125*toPos.y;
+        // 第二段控制点：P0=中点, P1=中点, P2=cp2, P3=toPos
+        const mid_cp2x = 0.5*cp2x + 0.5*mx, mid_cp2y = 0.5*cp2y + 0.5*my;
+        return `M ${mx} ${my} C ${mid_cp2x} ${mid_cp2y}, ${cp2x} ${cp2y}, ${toPos.x} ${toPos.y}`;
+      },
+
       getPortPosition(comp, port) {
         const cx = comp.x + comp.width / 2;
         const cy = comp.y + comp.height / 2;

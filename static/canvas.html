@@ -146,11 +146,19 @@
                     @mouseenter="onConnectionHover(conn)"
                     @mouseleave="onConnectionLeave(conn)" />
               <!-- 可见连接线 -->
-              <path :d="getConnectionPath(conn)" class="connection-path"
+              <path v-if="deletingConnId !== conn.id" :d="getConnectionPath(conn)" class="connection-path"
                     :class="{selected: selectedIds.includes(conn.id + '-conn')}"
                     @mouseenter="onConnectionHover(conn)"
                     @mouseleave="onConnectionLeave(conn)"
                     marker-end="url(#arrowhead)" />
+              <!-- 删除动画：两端向中间收缩消失 -->
+              <template v-else>
+                <path :d="getConnectionHalfForward(conn)" class="conn-half conn-half-fwd"
+                      @mouseenter="onConnectionHover(conn)" @mouseleave="onConnectionLeave(conn)"
+                      marker-end="url(#arrowhead)" />
+                <path :d="getConnectionHalfReverse(conn)" class="conn-half conn-half-rev"
+                      @mouseenter="onConnectionHover(conn)" @mouseleave="onConnectionLeave(conn)" />
+              </template>
               <circle v-for="port in getConnectionPorts(conn)" :key="port.id"
                       :cx="port.cx" :cy="port.cy" r="5" fill="#4a90d9"
                       style="pointer-events:all;cursor:crosshair"

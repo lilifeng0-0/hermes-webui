@@ -311,6 +311,13 @@ body {
   stroke-width: 2.5;
 }
 
+/* 连接线 hover 发光效果 */
+.connections-layer g.hovered .connection-path {
+  stroke: #4a90d9;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(74, 144, 217, 0.8));
+}
+
 /* 组件通用 */
 .canvas-component {
   position: absolute;

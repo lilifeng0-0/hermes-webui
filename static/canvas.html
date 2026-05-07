@@ -135,7 +135,7 @@
               </marker>
             </defs>
             <g v-for="conn in currentConnections" :key="conn.id"
-               :class="{hovered: hoveredConnId === conn.id}"
+               :class="{hovered: hoveredConnId === conn.id, 'conn-deleting': deletingConnId === conn.id}"
                style="cursor: pointer;"
                @click.stop="onConnectionClick(conn)"
                @contextmenu.prevent.stop="onConnectionContextMenu($event, conn)">

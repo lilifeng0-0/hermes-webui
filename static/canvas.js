@@ -22,6 +22,7 @@
         tool: 'select',
         selectedIds: [],
         hoveredConnId: null,
+        deletingConnId: null,
         editingTextId: null,
         editingCanvasId: null,
         isPanning: false,
@@ -1445,12 +1446,25 @@
       },
 
       deleteConnection(connId) {
+        if (this.deletingConnId) return; // 防止重复删除
         this.pushUndo();
-        const tab = this.canvas.canvases[this.canvas.activeCanvasId];
-        if (!tab) return;
-        tab.connections = tab.connections.filter(c => c.id !== connId);
-        this.scheduleAutoSave();
-        this.showToast('连接已删除');
+        this.deletingConnId = connId;
+        // 等待动画播放完毕后真正删除
+        setTimeout(() => {
+          const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+          if (tab) {
+            tab.connections = tab.connections.filter(c => c.id !== connId);
+            this.scheduleAutoSave();
+          }
+          if (this.deletingConnId === connId) {
+            this.deletingConnId = null;
+          }
+          if (this._rightClickedConn && this._rightClickedConn.id === connId) {
+            this._rightClickedConn = null;
+          }
+          this.contextMenu = { visible: false, x: 0, y: 0, items: [] };
+          this.showToast('连接已删除');
+        }, 300);
       },
 
       // ── 连接线拖拽创建 ──────────────────────────────────────────────

@@ -137,7 +137,7 @@
             <g v-for="conn in currentConnections" :key="conn.id">
               <!-- 透明粗线条扩大命中区域（不影响视觉） -->
               <path :d="getConnectionPath(conn)"
-                    fill="none" stroke="transparent" stroke-width="12"
+                    fill="none" stroke="transparent" stroke-width="36"
                     style="pointer-events: stroke; cursor: pointer;"
                     @click.stop="onConnectionClick(conn)"
                     @contextmenu.prevent.stop="onConnectionContextMenu($event, conn)"

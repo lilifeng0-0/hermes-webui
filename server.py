@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Hermes Web UI -- Main server entry point.
 Thin routing shell: imports Handler, delegates to api/routes.py, runs server.

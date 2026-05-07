@@ -1392,10 +1392,10 @@
         const cx = comp.x + comp.width / 2;
         const cy = comp.y + comp.height / 2;
         switch (port) {
-          case 'top': return { x: cx, y: comp.y };
-          case 'bottom': return { x: cx, y: comp.y + comp.height };
-          case 'left': return { x: comp.x, y: cy };
-          case 'right': return { x: comp.x + comp.width, y: cy };
+          case 'top':    return { x: cx,                y: comp.y };
+          case 'bottom': return { x: cx,                y: comp.y + comp.height };
+          case 'left':   return { x: comp.x,            y: cy };
+          case 'right':  return { x: comp.x + comp.width, y: cy };
           default: return { x: cx, y: cy };
         }
       },

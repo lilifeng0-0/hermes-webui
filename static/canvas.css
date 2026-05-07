@@ -320,24 +320,26 @@ body {
   stroke: #ff4444;
   stroke-width: 2.5;
   stroke-linecap: round;
+  /* transform-box 使 transform-origin 相对于路径自身 bounding box */
+  transform-box: fill-box;
 }
-/* 前半段：从起点缩小到中点（向右/下收缩） */
+/* 前半段：从起点缩小到中点 */
 .conn-half-fwd {
   transform-origin: left center;
   animation: conn-shrink-fwd 0.3s ease-in forwards;
 }
-/* 后半段：从终点缩小到中点（向左/上收缩） */
+/* 后半段：从终点缩小到中点 */
 .conn-half-rev {
   transform-origin: right center;
   animation: conn-shrink-rev 0.3s ease-in forwards;
 }
 @keyframes conn-shrink-fwd {
-  from { transform: scaleX(1); }
-  to   { transform: scaleX(0); }
+  from { transform: scaleX(1); opacity: 1; }
+  to   { transform: scaleX(0); opacity: 0; }
 }
 @keyframes conn-shrink-rev {
-  from { transform: scaleX(1); }
-  to   { transform: scaleX(0); }
+  from { transform: scaleX(1); opacity: 1; }
+  to   { transform: scaleX(0); opacity: 0; }
 }
 
 /* 连接线 hover 发光效果 */

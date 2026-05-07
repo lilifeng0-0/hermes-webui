@@ -43,6 +43,7 @@
         contextMenu: { visible: false, x: 0, y: 0, items: [] },
         activeSubmenu: null,
         draggingConnection: null, // {from, fromPort, currentX, currentY}
+        dragTargetCompId: null, // 拖拽连接线时悬停的目标组件ID（不论是否落在端口上）
         toast: { visible: false, message: '' },
         floatingToolbar: { visible: false, mouseDownX: 0, mouseDownY: 0 },
         toolbarRectBorder: '#333333',
@@ -1333,6 +1334,14 @@
         return bestPair;
       },
 
+      // 拖拽连接线时：自动选择目标组件上距离最近的端口
+      _getBestAutoPort(toComp, fromCompId) {
+        const fromComp = this.currentComponents.find(c => c.id === fromCompId);
+        if (!fromComp) return 'left';
+        const bestPair = this._getBestPorts(fromComp, toComp);
+        return bestPair.to;
+      },
+
       getConnectionPath(conn) {
         const fromComp = this.currentComponents.find(c => c.id === conn.from);
         const toComp = this.currentComponents.find(c => c.id === conn.to);
@@ -1567,38 +1576,54 @@
           const my = (ev.clientY - area.top) / this.zoom + this.panY;
           this.draggingConnection.currentX = mx;
           this.draggingConnection.currentY = my;
+          // 跟踪悬停的组件（不论是否在端口上）
+          const el = document.elementFromPoint(ev.clientX, ev.clientY);
+          const targetCompEl = el ? el.closest('.canvas-component') : null;
+          this.dragTargetCompId = targetCompEl ? targetCompEl.getAttribute('data-comp-id') : null;
         };
 
         const onUp = (ev) => {
           if (!this.draggingConnection) return;
           const el = document.elementFromPoint(ev.clientX, ev.clientY);
           const portEl = el ? el.closest('.comp-port') : null;
+          let targetCid = null;
+          let toPort = null;
           if (portEl) {
+            // 落在端口上 → 精确连接到端口
             const targetCompEl = portEl.closest('.canvas-component');
             if (targetCompEl) {
-              const cid = targetCompEl.getAttribute('data-comp-id');
-              if (cid && cid !== this.draggingConnection.from) {
-                this.pushUndo();
-                const tab = this.canvas.canvases[this.canvas.activeCanvasId];
-                if (!tab.connections) tab.connections = [];
-                const exists = tab.connections.some(
-                  c => c.from === this.draggingConnection.from && c.to === cid
-                );
-                if (!exists) {
-                  tab.connections.push({
-                    id: 'conn-' + Date.now(),
-                    from: this.draggingConnection.from,
-                    to: cid,
-                    fromPort: this.draggingConnection.fromPort,
-                    toPort: portEl.getAttribute('data-port'),
-                  });
-                  this.scheduleAutoSave();
-                  this.showToast('连接已创建');
-                }
-              }
+              targetCid = targetCompEl.getAttribute('data-comp-id');
+              toPort = portEl.getAttribute('data-port');
+            }
+          } else if (this.dragTargetCompId && this.dragTargetCompId !== this.draggingConnection.from) {
+            // 没落在端口上但悬停在某组件 → 自动选择最接近的端口连接
+            const targetComp = this.currentComponents.find(c => c.id === this.dragTargetCompId);
+            if (targetComp) {
+              targetCid = this.dragTargetCompId;
+              toPort = this._getBestAutoPort(targetComp, this.draggingConnection.from);
+            }
+          }
+          if (targetCid && targetCid !== this.draggingConnection.from) {
+            this.pushUndo();
+            const tab = this.canvas.canvases[this.canvas.activeCanvasId];
+            if (!tab.connections) tab.connections = [];
+            const exists = tab.connections.some(
+              c => c.from === this.draggingConnection.from && c.to === targetCid
+            );
+            if (!exists) {
+              tab.connections.push({
+                id: 'conn-' + Date.now(),
+                from: this.draggingConnection.from,
+                to: targetCid,
+                fromPort: this.draggingConnection.fromPort,
+                toPort: toPort,
+              });
+              this.scheduleAutoSave();
+              this.showToast('连接已创建');
             }
           }
           this.draggingConnection = null;
+          this.dragTargetCompId = null;
           window.removeEventListener('mousemove', onMove);
           window.removeEventListener('mouseup', onUp);
         };

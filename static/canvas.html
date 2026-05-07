@@ -144,7 +144,7 @@
                     @mouseenter="onConnectionHover(conn)"
                     @mouseleave="onConnectionLeave(conn)" />
               <path :d="getConnectionPath(conn)" class="connection-path"
-                    :class="{selected: selectedIds.includes(conn.from) || selectedIds.includes(conn.to), hovered: hoveredConnId === conn.id}"
+                    :class="{selected: selectedIds.includes(conn.id + '-conn'), hovered: hoveredConnId === conn.id}"
                     @click.stop="onConnectionClick(conn)"
                     @contextmenu.prevent.stop="onConnectionContextMenu($event, conn)"
                     @mouseenter="onConnectionHover(conn)"

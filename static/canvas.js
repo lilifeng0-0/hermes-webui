@@ -1416,10 +1416,8 @@
       },
 
       onConnectionClick(conn) {
-        // 选中连接线（通过选中起点或终点组件）
-        if (!this.selectedIds.includes(conn.from)) {
-          this.selectedIds = [conn.from, conn.to];
-        }
+        // 选中连接线（不选端点组件，只高亮连接线本身）
+        this.selectedIds = [conn.id + '-conn'];
         this._rightClickedConn = conn;
       },
 
